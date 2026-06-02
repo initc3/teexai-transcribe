@@ -8,3 +8,4 @@ service-account.json
 *.json
 refs/
 .claude/
+ic3_sites/
