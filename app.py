@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 API_KEY = os.environ["NEAR_API_KEY"]
@@ -43,9 +43,13 @@ async def transcribe(file: UploadFile = File(...)):
             f"{BASE}/audio/transcriptions",
             headers=headers(),
             files={"file": ("audio.ogg", audio, "audio/ogg")},
-            data={"model": "openai/whisper-large-v3"},
+            data={"model": "openai/whisper-large-v3", "response_format": "verbose_json"},
         )
-    return JSONResponse(r.json(), status_code=r.status_code)
+    if r.status_code != 200:
+        return JSONResponse(r.json(), status_code=r.status_code)
+    j = r.json()
+    return {"text": j.get("text", ""), "duration": j.get("duration"),
+            "segments": len(j.get("segments", []))}
 
 
 # ---------- chat (summarize / extract) ----------
@@ -64,6 +68,21 @@ async def chat(req: ChatReq):
             json={"model": req.model, "max_tokens": 1024, "messages": req.messages},
         )
     return JSONResponse(r.json(), status_code=r.status_code)
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(req: ChatReq):
+    async def gen():
+        async with httpx.AsyncClient(timeout=120) as client:
+            async with client.stream(
+                "POST", f"{BASE}/chat/completions", headers=headers(),
+                json={"model": req.model, "max_tokens": 1024, "stream": True,
+                      "stream_options": {"include_usage": True}, "messages": req.messages},
+            ) as r:
+                async for line in r.aiter_lines():
+                    if line:
+                        yield line + "\n"
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 # ---------- tool-using agent ----------
@@ -111,6 +130,7 @@ class AgentReq(BaseModel):
 @app.post("/api/agent")
 async def agent(req: AgentReq):
     messages = list(req.messages)
+    usage = {"prompt_tokens": 0, "completion_tokens": 0}
     async with httpx.AsyncClient(timeout=120) as client:
         for _ in range(6):
             r = await client.post(
@@ -121,16 +141,19 @@ async def agent(req: AgentReq):
             )
             if r.status_code != 200:
                 return JSONResponse(r.json(), status_code=r.status_code)
-            msg = r.json()["choices"][0]["message"]
+            body = r.json()
+            for k in usage:
+                usage[k] += body.get("usage", {}).get(k, 0)
+            msg = body["choices"][0]["message"]
             messages.append(msg)
             calls = msg.get("tool_calls")
             if not calls:
-                return {"reply": msg.get("content", ""), "messages": messages}
+                return {"reply": msg.get("content", ""), "messages": messages, "usage": usage}
             for c in calls:
                 result = run_tool(c["function"]["name"],
                                   json.loads(c["function"]["arguments"] or "{}"))
                 messages.append({"role": "tool", "tool_call_id": c["id"], "content": str(result)})
-    return {"reply": "(stopped: too many tool steps)", "messages": messages}
+    return {"reply": "(stopped: too many tool steps)", "messages": messages, "usage": usage}
 
 
 @app.get("/")

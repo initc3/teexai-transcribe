@@ -24,10 +24,34 @@
   .msg { margin: 8px 0; }
   .msg.user { color: #7fd3ff; }
   .msg.tool { color: #c8a36a; font-size: .85rem; }
+
+  /* network scope */
+  #scopeWrap { background: #16191f; border-radius: 10px; padding: 12px; margin-top: 10px; }
+  #scope { width: 100%; height: 120px; display: block; border-radius: 6px; background: #0b0d10; }
+  .hud { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: .8rem;
+         font-variant-numeric: tabular-nums; color: #9aa0a6; }
+  .hud b { color: #e6e6e6; font-weight: 600; }
+  .hud .out b { color: #5f8bff; }
+  .hud .in b { color: #46d39a; }
+  .hud .cost b { color: #ffcf5f; }
+  .legend { font-size: .72rem; color: #6b7280; margin-top: 6px; }
 </style>
 </head>
 <body>
 <h1>🎙️ NEAR Agentic Transcripts</h1>
+
+<h2>📡 Network scope · running in a Phala TEE</h2>
+<div id="scopeWrap">
+  <canvas id="scope"></canvas>
+  <div class="hud">
+    <span class="out">⬆ out <b id="hOutT">0</b> tok · <b id="hOutB">0</b> KB</span>
+    <span class="in">⬇ in <b id="hInT">0</b> tok · <b id="hSeg">0</b> seg</span>
+    <span>⇄ <b id="hRt">0</b> calls · <b id="hSec">0.0</b>s audio</span>
+    <span>⏱ <b id="hEl">0:00</b></span>
+    <span class="cost">💸 <b id="hCost">$0.0000</b> est · <b id="hBurn">$0.00</b>/min</span>
+  </div>
+  <div class="legend">blue = bytes/tokens leaving the enclave · green = tokens streaming back · $ is an estimate (edit PRICES)</div>
+</div>
 
 <h2>1 · Live transcription</h2>
 <button id="rec">Start recording</button>
@@ -47,10 +71,67 @@
 
 <script>
 const SEG_MS = 4000;
+const MODEL = 'anthropic/claude-haiku-4-5';
 const $ = id => document.getElementById(id);
 const transcriptEl = $('transcript');
 
-// ---- live transcription (continuous: re-transcribe the whole clip) ----
+// ---- cost model (ESTIMATE — per 1M tokens / per audio-minute; edit to match near.ai) ----
+const PRICES = {
+  'anthropic/claude-haiku-4-5': { in: 1.00, out: 5.00 },  // $ / 1M tokens
+  whisper: 0.006,                                          // $ / audio-minute
+};
+const tokCost = (m, pt, ct) => (PRICES[m] ? (pt * PRICES[m].in + ct * PRICES[m].out) / 1e6 : 0);
+const audioCost = sec => (sec / 60) * PRICES.whisper;
+
+// ---- network scope (waterfall) ----
+const scope = (() => {
+  const cv = $('scope'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, COLS = 0;
+  const fit = () => { W = cv.width = cv.clientWidth * devicePixelRatio;
+    H = cv.height = cv.clientHeight * devicePixelRatio; COLS = Math.floor(W / (2 * devicePixelRatio)); };
+  addEventListener('resize', fit); fit();
+  let out = [], inb = [], accOut = 0, accIn = 0, last = 0;
+  const C = { outT: 0, outB: 0, inT: 0, seg: 0, rt: 0, sec: 0, cost: 0, t0: 0 };
+
+  function push(arr, v) { arr.push(v); while (arr.length > COLS) arr.shift(); }
+  function draw(ts) {
+    if (!last) last = ts;
+    if (ts - last >= 45) { push(out, accOut); push(inb, accIn); accOut = accIn = 0; last = ts; }
+    const max = Math.max(1, ...out, ...inb);
+    ctx.clearRect(0, 0, W, H);
+    const mid = H / 2, colW = W / COLS;
+    ctx.strokeStyle = '#1c2128'; ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
+    for (let i = 0; i < out.length; i++) {
+      const x = i * colW;
+      const oh = (out[i] / max) * (mid - 2), ih = (inb[i] / max) * (mid - 2);
+      const lead = i >= out.length - 2;
+      if (oh > 0) { ctx.fillStyle = lead ? '#9ab8ff' : '#5f8bff'; ctx.fillRect(x, mid - oh, colW + 1, oh); }
+      if (ih > 0) { ctx.fillStyle = lead ? '#7ff0c2' : '#46d39a'; ctx.fillRect(x, mid, colW + 1, ih); }
+    }
+    hud();
+    requestAnimationFrame(draw);
+  }
+  function hud() {
+    $('hOutT').textContent = C.outT; $('hOutB').textContent = (C.outB / 1024).toFixed(1);
+    $('hInT').textContent = C.inT; $('hSeg').textContent = C.seg;
+    $('hRt').textContent = C.rt; $('hSec').textContent = C.sec.toFixed(1);
+    const el = C.t0 ? (Date.now() - C.t0) / 1000 : 0;
+    $('hEl').textContent = `${Math.floor(el / 60)}:${String(Math.floor(el % 60)).padStart(2, '0')}`;
+    $('hCost').textContent = '$' + C.cost.toFixed(4);
+    $('hBurn').textContent = '$' + (el > 1 ? C.cost / (el / 60) : 0).toFixed(2);
+  }
+  requestAnimationFrame(draw);
+  const tick = () => { if (!C.t0) C.t0 = Date.now(); C.rt++; };
+  return {
+    audioOut: bytes => { tick(); accOut += bytes / 200; C.outB += bytes; },
+    promptTok: n => { accOut += n; C.outT += n; },
+    inTok: n => { accIn += n; C.inT += n; },
+    seg: (n, sec) => { C.seg = Math.max(C.seg, n); C.sec += sec || 0; C.cost += audioCost(sec || 0); },
+    cost: (m, pt, ct) => { C.cost += tokCost(m, pt, ct); },
+  };
+})();
+
+// ---- live transcription ----
 let recorder = null, stream = null, chunks = [], timer = null, busy = false;
 
 $('rec').onclick = async () => {
@@ -70,8 +151,12 @@ async function refresh(final) {
   if ((busy && !final) || !chunks.length) return;
   busy = true;
   $('recStatus').textContent = final ? 'finalizing…' : 'transcribing…';
-  const text = await transcribeBlob(new Blob(chunks, { type: recorder.mimeType }));
-  if (text) transcriptEl.textContent = text.trim();
+  const r = await transcribeBlob(new Blob(chunks, { type: recorder.mimeType }));
+  if (r && r.text) {
+    transcriptEl.textContent = r.text.trim();
+    scope.inTok(Math.ceil(r.text.length / 4));
+    scope.seg(r.segments || 0, r.duration || 0);
+  }
   $('recStatus').textContent = final ? '' : 'listening…';
   busy = false;
 }
@@ -87,30 +172,51 @@ async function stopRecording() {
 }
 
 async function transcribeBlob(blob) {
+  scope.audioOut(blob.size);
   const fd = new FormData();
   fd.append('file', blob, 'audio.webm');
   const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
-  const j = await r.json();
-  return r.ok ? j.text : '';
+  return r.ok ? r.json() : null;
 }
 
-// ---- summarize ----
+// ---- summarize (streaming) ----
 $('summarize').onclick = async () => {
   const text = transcriptEl.textContent.trim();
   if (!text) { $('sumStatus').textContent = 'no transcript yet'; return; }
-  $('sumStatus').textContent = 'thinking…';
+  $('sumStatus').textContent = 'streaming…';
   $('summary').textContent = '';
-  const r = await fetch('/api/chat', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: [
-      { role: 'system', content: 'Summarize the transcript in 2-3 sentences, then list action items as bullets. If there are none, say so.' },
-      { role: 'user', content: text },
-    ]}),
-  });
-  const j = await r.json();
+  const messages = [
+    { role: 'system', content: 'Summarize the transcript in 2-3 sentences, then list action items as bullets. If there are none, say so.' },
+    { role: 'user', content: text },
+  ];
+  scope.promptTok(Math.ceil(text.length / 4));
+  await streamChat(messages, t => { $('summary').textContent += t; });
   $('sumStatus').textContent = '';
-  $('summary').textContent = r.ok ? j.choices[0].message.content : JSON.stringify(j);
 };
+
+async function streamChat(messages, onDelta) {
+  const r = await fetch('/api/chat/stream', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, model: MODEL }),
+  });
+  const reader = r.body.getReader(), dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n'); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (data === '[DONE]') continue;
+      let j; try { j = JSON.parse(data); } catch { continue; }
+      const delta = j.choices?.[0]?.delta?.content;
+      if (delta) { onDelta(delta); scope.inTok(Math.max(1, Math.ceil(delta.length / 4))); }
+      if (j.usage) scope.cost(MODEL, j.usage.prompt_tokens, j.usage.completion_tokens);
+    }
+  }
+}
 
 // ---- agent ----
 const chatEl = $('chat');
@@ -126,14 +232,17 @@ $('send').onclick = async () => {
   history.push({ role: 'user', content: ask });
   addMsg('user', ask);
   $('agentStatus').textContent = 'working…';
+  scope.promptTok(Math.ceil((transcript + ask).length / 4));
   const r = await fetch('/api/agent', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: history }),
+    body: JSON.stringify({ messages: history, model: MODEL }),
   });
   const j = await r.json();
   $('agentStatus').textContent = '';
   if (!r.ok) { addMsg('tool', JSON.stringify(j)); return; }
   history = j.messages;
+  if (j.usage) { scope.cost(MODEL, j.usage.prompt_tokens, j.usage.completion_tokens);
+    scope.inTok(j.usage.completion_tokens); }
   for (const m of history) {
     if (m.role === 'tool') continue;
     if (m.role === 'assistant' && m.tool_calls)
@@ -151,7 +260,7 @@ function renderToolOnce(id, label) {
 function addMsg(role, text) {
   const d = document.createElement('div');
   d.className = 'msg ' + role;
-  d.textContent = (role === 'user' ? 'you: ' : role === 'assistant' ? '' : '') + text;
+  d.textContent = (role === 'user' ? 'you: ' : '') + text;
   chatEl.appendChild(d);
 }
 </script>
