@@ -1,0 +1,8 @@
+services:
+  app:
+    image: ghcr.io/amiller/teexai-transcribe:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - NEAR_API_KEY=${NEAR_API_KEY}
+    restart: unless-stopped

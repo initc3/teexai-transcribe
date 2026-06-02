@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEAR Agentic Transcripts</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 32px auto; padding: 0 16px;
+         background: #0d0f12; color: #e6e6e6; line-height: 1.5; }
+  h1 { font-weight: 600; }
+  h2 { font-weight: 600; font-size: 1.05rem; color: #9aa0a6; margin: 28px 0 10px; }
+  button { font-size: .95rem; padding: 10px 18px; border: none; border-radius: 10px;
+           cursor: pointer; background: #5f8bff; color: white; }
+  button.secondary { background: #2a2f3a; }
+  button:disabled { opacity: .4; cursor: default; }
+  #rec.recording { background: #ff4d4d; }
+  .status { color: #9aa0a6; font-size: .85rem; margin-left: 10px; }
+  .box { background: #16191f; border-radius: 10px; padding: 14px; white-space: pre-wrap;
+         min-height: 40px; margin-top: 10px; }
+  #transcript[contenteditable] { outline: 1px solid #2a2f3a; }
+  textarea { width: 100%; box-sizing: border-box; background: #16191f; color: #e6e6e6;
+             border: 1px solid #2a2f3a; border-radius: 10px; padding: 10px; font: inherit; }
+  .msg { margin: 8px 0; }
+  .msg.user { color: #7fd3ff; }
+  .msg.tool { color: #c8a36a; font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>🎙️ NEAR Agentic Transcripts</h1>
+
+<h2>1 · Live transcription</h2>
+<button id="rec">Start recording</button>
+<span id="recStatus" class="status"></span>
+<div id="transcript" class="box" contenteditable spellcheck="false"></div>
+
+<h2>2 · Summarize / extract</h2>
+<button id="summarize" class="secondary">Summarize + action items</button>
+<span id="sumStatus" class="status"></span>
+<div id="summary" class="box"></div>
+
+<h2>3 · Agent (acts on the transcript)</h2>
+<textarea id="ask" rows="2" placeholder="e.g. Save the action items as notes, then tell me the time."></textarea>
+<div style="margin-top:8px"><button id="send" class="secondary">Send</button>
+<span id="agentStatus" class="status"></span></div>
+<div id="chat" class="box"></div>
+
+<script>
+const SEG_MS = 4000;
+const $ = id => document.getElementById(id);
+const transcriptEl = $('transcript');
+
+// ---- live transcription (continuous: re-transcribe the whole clip) ----
+let recorder = null, stream = null, chunks = [], timer = null, busy = false;
+
+$('rec').onclick = async () => {
+  if (recorder) { stopRecording(); return; }
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  chunks = [];
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+  recorder.start(1000);
+  $('rec').classList.add('recording');
+  $('rec').textContent = 'Stop recording';
+  $('recStatus').textContent = 'listening…';
+  timer = setInterval(refresh, SEG_MS);
+};
+
+async function refresh(final) {
+  if ((busy && !final) || !chunks.length) return;
+  busy = true;
+  $('recStatus').textContent = final ? 'finalizing…' : 'transcribing…';
+  const text = await transcribeBlob(new Blob(chunks, { type: recorder.mimeType }));
+  if (text) transcriptEl.textContent = text.trim();
+  $('recStatus').textContent = final ? '' : 'listening…';
+  busy = false;
+}
+
+async function stopRecording() {
+  clearInterval(timer);
+  $('rec').classList.remove('recording');
+  $('rec').textContent = 'Start recording';
+  await new Promise(res => { recorder.onstop = res; recorder.stop(); });
+  stream.getTracks().forEach(t => t.stop());
+  await refresh(true);
+  recorder = null;
+}
+
+async function transcribeBlob(blob) {
+  const fd = new FormData();
+  fd.append('file', blob, 'audio.webm');
+  const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
+  const j = await r.json();
+  return r.ok ? j.text : '';
+}
+
+// ---- summarize ----
+$('summarize').onclick = async () => {
+  const text = transcriptEl.textContent.trim();
+  if (!text) { $('sumStatus').textContent = 'no transcript yet'; return; }
+  $('sumStatus').textContent = 'thinking…';
+  $('summary').textContent = '';
+  const r = await fetch('/api/chat', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: [
+      { role: 'system', content: 'Summarize the transcript in 2-3 sentences, then list action items as bullets. If there are none, say so.' },
+      { role: 'user', content: text },
+    ]}),
+  });
+  const j = await r.json();
+  $('sumStatus').textContent = '';
+  $('summary').textContent = r.ok ? j.choices[0].message.content : JSON.stringify(j);
+};
+
+// ---- agent ----
+const chatEl = $('chat');
+let history = [];
+
+$('send').onclick = async () => {
+  const ask = $('ask').value.trim();
+  if (!ask) return;
+  $('ask').value = '';
+  const transcript = transcriptEl.textContent.trim();
+  if (!history.length) history.push({ role: 'system',
+    content: 'You are an assistant acting on a meeting transcript. Use tools when helpful. Transcript:\n' + transcript });
+  history.push({ role: 'user', content: ask });
+  addMsg('user', ask);
+  $('agentStatus').textContent = 'working…';
+  const r = await fetch('/api/agent', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: history }),
+  });
+  const j = await r.json();
+  $('agentStatus').textContent = '';
+  if (!r.ok) { addMsg('tool', JSON.stringify(j)); return; }
+  history = j.messages;
+  for (const m of history) {
+    if (m.role === 'tool') continue;
+    if (m.role === 'assistant' && m.tool_calls)
+      m.tool_calls.forEach(c => renderToolOnce(c.id, c.function.name + '(' + c.function.arguments + ')'));
+  }
+  addMsg('assistant', j.reply);
+};
+
+const shownTools = new Set();
+function renderToolOnce(id, label) {
+  if (shownTools.has(id)) return;
+  shownTools.add(id);
+  addMsg('tool', '🔧 ' + label);
+}
+function addMsg(role, text) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  d.textContent = (role === 'user' ? 'you: ' : role === 'assistant' ? '' : '') + text;
+  chatEl.appendChild(d);
+}
+</script>
+</body>
+</html>
