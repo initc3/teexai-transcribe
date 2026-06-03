@@ -3,3 +3,5 @@ uvicorn==0.48.0
 httpx==0.28.1
 pydantic==2.13.4
 python-multipart
+numpy==2.4.6
+sherpa-onnx==1.13.2

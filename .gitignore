@@ -9,3 +9,4 @@ service-account.json
 refs/
 .claude/
 ic3_sites/
+models/
