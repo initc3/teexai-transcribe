@@ -1,0 +1,4 @@
+{"type":"transcript.segment","source":"teexai-transcribe","payload":{"text":"We decided Alice owns the follow-up by Friday.","speaker":"Andrew","isFinal":true,"confidence":0.91}}
+{"type":"transcript.segment","source":"teexai-transcribe","payload":{"text":"Let's keep this off the record for now.","speaker":"Andrew","isFinal":true,"confidence":0.93}}
+{"type":"transcript.segment","source":"teexai-transcribe","payload":{"text":"Ops needs this number but not the whole conversation.","speaker":"Goku","isFinal":true,"confidence":0.88}}
+{"type":"transcript.segment","source":"teexai-transcribe","payload":{"text":"The migration has no risk and everyone agrees.","speaker":"Aviv","isFinal":true,"confidence":0.86}}
