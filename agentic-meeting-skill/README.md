@@ -11,6 +11,7 @@ Current documents:
 - [Cue Jitsi meeting demo scaffold](./cue-jitsi-demo/README.md)
 - [Cues and meeting journey notes](./cues-and-meeting-journey-notes.md)
 - [Alternatives to Jitsi for an agentic meeting skill](./meeting-platform-alternatives.md)
+- [Meet bot detection vs. the Jitsi approach](./meet-bot-detection-vs-jitsi.md)
 
 Working product thesis:
 
