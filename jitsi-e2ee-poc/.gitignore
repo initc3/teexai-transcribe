@@ -1,0 +1,8 @@
+# secrets + runtime state
+jitsi/.env
+jitsi/config/
+# generated/large audio
+audio/*.wav
+# whisper model caches
+asr/models/
+**/__pycache__/
