@@ -12,6 +12,7 @@ Current documents:
 - [Cues and meeting journey notes](./cues-and-meeting-journey-notes.md)
 - [Alternatives to Jitsi for an agentic meeting skill](./meeting-platform-alternatives.md)
 - [Meet bot detection vs. the Jitsi approach](./meet-bot-detection-vs-jitsi.md)
+- [One-shot E2EE Jitsi + audio-processing docker POC](./jitsi-e2ee-docker-poc.md)
 
 Working product thesis:
 
