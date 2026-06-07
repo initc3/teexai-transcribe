@@ -10,6 +10,13 @@ if [ ! -f "$ENVFILE" ]; then
   (cd jitsi && cp .env.sample .env && ./gen-passwords.sh)
 fi
 
+# ASR transcribes via near.ai (no local whisper). Load the key from the repo .env.
+if [ -z "${NEAR_API_KEY:-}" ] && [ -f ../.env ]; then
+  set -a; . ../.env; set +a
+fi
+: "${NEAR_API_KEY:?NEAR_API_KEY not set (expected in ../.env)}"
+export NEAR_API_KEY
+
 cleanup() { docker compose --env-file "$ENVFILE" down >/dev/null 2>&1; }
 trap cleanup EXIT
 

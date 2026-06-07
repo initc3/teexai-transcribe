@@ -1,10 +1,15 @@
+import io, os
 import numpy as np
+import soundfile as sf
+import httpx
 from fastapi import FastAPI, WebSocket, Request
-from faster_whisper import WhisperModel
+
+API_KEY = os.environ["NEAR_API_KEY"]
+BASE = "https://cloud-api.near.ai/v1"
+SR = 16000
 
 app = FastAPI()
-model = WhisperModel("base", download_root="/models", compute_type="int8")
-bufs = {}  # role -> [np.float32 arrays]
+bufs = {}  # role -> [np.float32]
 
 
 @app.websocket("/pcm")
@@ -14,8 +19,7 @@ async def pcm(ws: WebSocket):
     bufs.setdefault(role, [])
     try:
         while True:
-            data = await ws.receive_bytes()
-            bufs[role].append(np.frombuffer(data, dtype=np.float32))
+            bufs[role].append(np.frombuffer(await ws.receive_bytes(), dtype=np.float32))
     except Exception:
         pass
 
@@ -26,15 +30,25 @@ async def log(req: Request):
     return {}
 
 
-def transcribe(role):
+async def transcribe(role):
     chunks = bufs.get(role, [])
     if not chunks:
         return {"text": "", "samples": 0}
     audio = np.concatenate(chunks).astype(np.float32)
-    segs, _ = model.transcribe(audio, language="en", beam_size=1, vad_filter=False)
-    return {"text": " ".join(s.text for s in segs).strip(), "samples": int(audio.size)}
+    buf = io.BytesIO()
+    sf.write(buf, audio, SR, format="WAV", subtype="PCM_16")
+    buf.seek(0)
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.post(
+            f"{BASE}/audio/transcriptions",
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            files={"file": ("a.wav", buf, "audio/wav")},
+            data={"model": "openai/whisper-large-v3", "response_format": "json"},
+        )
+    r.raise_for_status()
+    return {"text": r.json().get("text", "").strip(), "samples": int(audio.size)}
 
 
 @app.get("/results")
-def results():
-    return {role: transcribe(role) for role in ("listener", "eavesdropper")}
+async def results():
+    return {role: await transcribe(role) for role in ("listener", "eavesdropper")}

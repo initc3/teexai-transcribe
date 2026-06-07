@@ -16,14 +16,15 @@ Same E2EE media reaches every participant:
 ```
 jitsi/        vendored jitsi/docker-jitsi-meet (stable-9646): web, prosody, jicofo, jvb
 bots/         bot.html + join JS + AudioWorklet (served BY the web container, https origin)
-asr/          local whisper, WS: PCM in -> transcript out  (hermetic; no near.ai key needed)
+asr/          thin shim: buffers PCM, forwards to near.ai whisper-large-v3 (no local model)
 test-runner/  collects transcripts, asserts listener-pass + eavesdropper-fail
 audio/        injected WAV fixture (44.1kHz/stereo/16-bit)
 ```
 
-ASR note: kept hermetic (local whisper) so the test needs no key/network. Pointing the
-listener at teexai-transcribe's `/api/transcribe` (near.ai TEE path) instead is a config
-swap for the "real" integration.
+ASR note: transcription is offloaded to near.ai (whisper-large-v3, the same TEE path
+`teexai-transcribe` uses) — no local whisper model, so it doesn't eat laptop RAM. The shim
+just buffers decrypted PCM and POSTs a WAV. `run.sh` loads `NEAR_API_KEY` from `../.env`;
+the test therefore needs that key + network egress (it is not hermetic).
 
 ## Run
 
@@ -35,7 +36,7 @@ swap for the "real" integration.
 the duration of the test — `--abort-on-container-exit` stops it when `test-runner` exits and
 the `trap` removes the containers. Nothing is left running.
 
-Example PASS (whisper-base):
+Example PASS:
 ```
 [test] listener     samples=737920  overlap=0.83 text='...the quick brown fox jumps over the lazy dog...'
 [test] eavesdropper samples=1232000 overlap=0.00 text=''
@@ -48,7 +49,7 @@ what a server-side tap sees.
 
 - [x] M1 — Jitsi stack up, self-signed HTTPS, serves config.js + lib-jitsi-meet.min.js.
 - [x] M2 — pseudo-headed Chromium bots join via lib-jitsi-meet (in-network wss, --ignore-cert).
-- [x] M3 — publisher injects WAV; listener taps PCM via AudioWorklet -> whisper transcript.
+- [x] M3 — publisher injects WAV; listener taps PCM via AudioWorklet -> near.ai whisper.
 - [x] M4 — shared-key E2EE (externallyManagedKey); keyless eavesdropper gets garbage.
 - [x] M5 — single-command self-cleaning one-shot with pass/fail exit code.
 

@@ -11,6 +11,8 @@ services:
   asr:
     build: ./asr
     image: e2ee-asr
+    environment:
+      NEAR_API_KEY: ${NEAR_API_KEY:?run.sh loads this from ../.env}
     networks: [meet.jitsi]
 
   bot-publisher:
