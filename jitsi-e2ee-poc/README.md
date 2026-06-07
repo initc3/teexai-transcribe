@@ -25,21 +25,42 @@ ASR note: kept hermetic (local whisper) so the test needs no key/network. Pointi
 listener at teexai-transcribe's `/api/transcribe` (near.ai TEE path) instead is a config
 swap for the "real" integration.
 
-## Run (target)
+## Run
 
 ```bash
-cd jitsi && cp .env.sample .env && ./gen-passwords.sh && cd ..
-docker compose up --build --abort-on-container-exit --exit-code-from test-runner
+./run.sh    # builds, runs the test, ALWAYS tears down; exit 0 = PASS
 ```
 
-## Status
+`run.sh` auto-generates `jitsi/.env` (passwords) on first run. The stack only exists for
+the duration of the test — `--abort-on-container-exit` stops it when `test-runner` exits and
+the `trap` removes the containers. Nothing is left running.
 
-- [x] M1 — Jitsi stack up, self-signed HTTPS, serves config.js + lib-jitsi-meet.min.js;
-      jicofo+jvb healthy; JVB advertises its in-network IP (in-container media OK).
-- [ ] M2 — pseudo-headed Chromium bot joins a room via lib-jitsi-meet.
-- [ ] M3 — publisher injects WAV; listener taps PCM -> whisper transcript (no E2EE yet).
-- [ ] M4 — shared-key E2EE on; eavesdropper (no key) gets garbage.
-- [ ] M5 — single-command one-shot with pass/fail exit code.
+Example PASS (whisper-base):
+```
+[test] listener     samples=737920  overlap=0.83 text='...the quick brown fox jumps over the lazy dog...'
+[test] eavesdropper samples=1232000 overlap=0.00 text=''
+[test] RESULT: PASS — E2EE holds: only the keyed participant reads audio
+```
+The eavesdropper *receives* the frames (non-zero samples) but recovers no audio — exactly
+what a server-side tap sees.
+
+## Status — all green
+
+- [x] M1 — Jitsi stack up, self-signed HTTPS, serves config.js + lib-jitsi-meet.min.js.
+- [x] M2 — pseudo-headed Chromium bots join via lib-jitsi-meet (in-network wss, --ignore-cert).
+- [x] M3 — publisher injects WAV; listener taps PCM via AudioWorklet -> whisper transcript.
+- [x] M4 — shared-key E2EE (externallyManagedKey); keyless eavesdropper gets garbage.
+- [x] M5 — single-command self-cleaning one-shot with pass/fail exit code.
+
+## Hard-won fixes
+
+- E2EE crypto runs in a Web Worker — must vendor `lib-jitsi-meet.e2ee-worker.js` next to the
+  main lib, served from the page origin, or decryption silently never engages.
+- Startup race: bots must not join before jicofo joins the bridge brewery / discovers
+  components, else `CONFERENCE_FAILED focusDisconnected`. Handled by a settle delay + a
+  rejoin retry in bot.js (jicofo's `/about/health` is 404 in this build, so don't poll it).
+- Page secure-context (needed for insertable streams) comes free via `http://localhost`
+  inside each bot container; the cross-origin wss to `web` uses `--ignore-certificate-errors`.
 
 ## Notes
 
