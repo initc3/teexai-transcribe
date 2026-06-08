@@ -4,3 +4,10 @@ __pycache__/
 notes.json
 .env
 .git/
+**/node_modules/
+**/smithers.db*
+**/.smithers/
+samples/voices/
+*.wav
+scrape.log
+service-account.json

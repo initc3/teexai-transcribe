@@ -35,6 +35,10 @@
   .hud .in b { color: #46d39a; }
   .hud .cost b { color: #ffcf5f; }
   .legend { font-size: .72rem; color: #6b7280; margin-top: 6px; }
+  .spk { font-weight: 600; }
+  .s0 { color: #5f8bff; } .s1 { color: #46d39a; } .s2 { color: #ffcf5f; } .s3 { color: #ff8fa3; }
+  .filelabel { display: inline-block; background: #2a2f3a; color: #e6e6e6; padding: 10px 18px;
+               border-radius: 10px; cursor: pointer; font-size: .95rem; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -55,8 +59,10 @@
 
 <h2>1 · Live transcription</h2>
 <button id="rec">Start recording</button>
+<label class="filelabel">📁 Transcribe a file<input type="file" id="file" accept="audio/*" hidden></label>
 <span id="recStatus" class="status"></span>
 <div id="transcript" class="box" contenteditable spellcheck="false"></div>
+<div class="legend">stop / file upload runs speaker diarization in the enclave (sherpa-onnx pyannote) and labels each turn</div>
 
 <h2>2 · Summarize / extract</h2>
 <button id="summarize" class="secondary">Summarize + action items</button>
@@ -150,15 +156,37 @@ $('rec').onclick = async () => {
 async function refresh(final) {
   if ((busy && !final) || !chunks.length) return;
   busy = true;
-  $('recStatus').textContent = final ? 'finalizing…' : 'transcribing…';
-  const r = await transcribeBlob(new Blob(chunks, { type: recorder.mimeType }));
-  if (r && r.text) {
-    transcriptEl.textContent = r.text.trim();
-    scope.inTok(Math.ceil(r.text.length / 4));
-    scope.seg(r.segments || 0, r.duration || 0);
-  }
+  $('recStatus').textContent = final ? 'finalizing (diarizing)…' : 'transcribing…';
+  const blob = new Blob(chunks, { type: recorder.mimeType });
+  const r = final ? await transcribeDiarized(blob) : await transcribeBlob(blob);
+  if (r) showTranscript(r);
   $('recStatus').textContent = final ? '' : 'listening…';
   busy = false;
+}
+
+function showTranscript(r) {
+  if (Array.isArray(r.segments)) renderDiarized(r.segments);
+  else if (r.text) transcriptEl.textContent = r.text.trim();
+  if (r.text) scope.inTok(Math.ceil(r.text.length / 4));
+  scope.seg(Array.isArray(r.segments) ? r.segments.length : (r.segments || 0), r.duration || 0);
+}
+
+function renderDiarized(segs) {
+  transcriptEl.innerHTML = '';
+  let cur = null;
+  for (const s of segs) {
+    if (!cur || cur.speaker !== s.speaker) {
+      cur = { speaker: s.speaker, text: s.text.trim() };
+      const tag = document.createElement('span');
+      tag.className = 'spk s' + (parseInt((s.speaker || '').slice(-2), 10) % 4);
+      tag.textContent = (s.speaker || '?') + ': ';
+      transcriptEl.appendChild(tag);
+      cur.node = transcriptEl.appendChild(document.createTextNode(cur.text + '\n'));
+    } else {
+      cur.text += ' ' + s.text.trim();
+      cur.node.textContent = cur.text + '\n';
+    }
+  }
 }
 
 async function stopRecording() {
@@ -178,6 +206,24 @@ async function transcribeBlob(blob) {
   const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
   return r.ok ? r.json() : null;
 }
+
+async function transcribeDiarized(blob) {
+  scope.audioOut(blob.size);
+  const fd = new FormData();
+  fd.append('file', blob, blob.name || 'audio.webm');
+  const r = await fetch('/api/transcribe_diarized', { method: 'POST', body: fd });
+  return r.ok ? r.json() : null;
+}
+
+$('file').onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $('recStatus').textContent = 'transcribing + diarizing…';
+  const r = await transcribeDiarized(f);
+  $('recStatus').textContent = r ? '' : 'failed';
+  if (r) showTranscript(r);
+  e.target.value = '';
+};
 
 // ---- summarize (streaming) ----
 $('summarize').onclick = async () => {
