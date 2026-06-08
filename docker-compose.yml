@@ -5,4 +5,13 @@ services:
       - "8000:8000"
     environment:
       - NEAR_API_KEY=${NEAR_API_KEY}
+      - VOICEPRINT_DIR=/data
+    volumes:
+      # Voiceprints are biometric — persist them on a volume so they survive
+      # redeploy. On Phala this maps to a persistent *encrypted* volume (the
+      # sealing boundary). TODO: encrypt at rest with an enclave-bound key.
+      - voiceprints:/data
     restart: unless-stopped
+
+volumes:
+  voiceprints:
