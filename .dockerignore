@@ -2,6 +2,8 @@
 __pycache__/
 *.pyc
 notes.json
+voiceprints.json
+models/
 .env
 .git/
 **/node_modules/

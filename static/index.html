@@ -1,314 +1,1413 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NEAR Agentic Transcripts</title>
-<style>
-  :root { color-scheme: dark; }
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 32px auto; padding: 0 16px;
-         background: #0d0f12; color: #e6e6e6; line-height: 1.5; }
-  h1 { font-weight: 600; }
-  h2 { font-weight: 600; font-size: 1.05rem; color: #9aa0a6; margin: 28px 0 10px; }
-  button { font-size: .95rem; padding: 10px 18px; border: none; border-radius: 10px;
-           cursor: pointer; background: #5f8bff; color: white; }
-  button.secondary { background: #2a2f3a; }
-  button:disabled { opacity: .4; cursor: default; }
-  #rec.recording { background: #ff4d4d; }
-  .status { color: #9aa0a6; font-size: .85rem; margin-left: 10px; }
-  .box { background: #16191f; border-radius: 10px; padding: 14px; white-space: pre-wrap;
-         min-height: 40px; margin-top: 10px; }
-  #transcript[contenteditable] { outline: 1px solid #2a2f3a; }
-  textarea { width: 100%; box-sizing: border-box; background: #16191f; color: #e6e6e6;
-             border: 1px solid #2a2f3a; border-radius: 10px; padding: 10px; font: inherit; }
-  .msg { margin: 8px 0; }
-  .msg.user { color: #7fd3ff; }
-  .msg.tool { color: #c8a36a; font-size: .85rem; }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NEAR Agentic Transcripts</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #000000;
+        --surface: #0c0d10;
+        --surface-2: #131419;
+        --surface-3: #1a1c22;
+        --border: #26282f;
+        --border-soft: #181a1f;
+        --text: #f3f2ef;
+        --muted: #8b8d96;
+        --faint: #5d5f68;
+        --accent: #ff5c3c; /* coral glow from the reference photos */
+        --accent-dim: #ff8366;
+        --mint: #5fd6a8;
+        --amber: #ffcf5f;
 
-  /* network scope */
-  #scopeWrap { background: #16191f; border-radius: 10px; padding: 12px; margin-top: 10px; }
-  #scope { width: 100%; height: 120px; display: block; border-radius: 6px; background: #0b0d10; }
-  .hud { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: .8rem;
-         font-variant-numeric: tabular-nums; color: #9aa0a6; }
-  .hud b { color: #e6e6e6; font-weight: 600; }
-  .hud .out b { color: #5f8bff; }
-  .hud .in b { color: #46d39a; }
-  .hud .cost b { color: #ffcf5f; }
-  .legend { font-size: .72rem; color: #6b7280; margin-top: 6px; }
-  .spk { font-weight: 600; }
-  .s0 { color: #5f8bff; } .s1 { color: #46d39a; } .s2 { color: #ffcf5f; } .s3 { color: #ff8fa3; }
-  .filelabel { display: inline-block; background: #2a2f3a; color: #e6e6e6; padding: 10px 18px;
-               border-radius: 10px; cursor: pointer; font-size: .95rem; margin-left: 8px; }
-</style>
-</head>
-<body>
-<h1>🎙️ NEAR Agentic Transcripts</h1>
+        --display: "Chakra Petch", system-ui, sans-serif;
+        --body: "Sora", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
 
-<h2>📡 Network scope · running in a Phala TEE</h2>
-<div id="scopeWrap">
-  <canvas id="scope"></canvas>
-  <div class="hud">
-    <span class="out">⬆ out <b id="hOutT">0</b> tok · <b id="hOutB">0</b> KB</span>
-    <span class="in">⬇ in <b id="hInT">0</b> tok · <b id="hSeg">0</b> seg</span>
-    <span>⇄ <b id="hRt">0</b> calls · <b id="hSec">0.0</b>s audio</span>
-    <span>⏱ <b id="hEl">0:00</b></span>
-    <span class="cost">💸 <b id="hCost">$0.0000</b> est · <b id="hBurn">$0.00</b>/min</span>
-  </div>
-  <div class="legend">blue = bytes/tokens leaving the enclave · green = tokens streaming back · $ is an estimate (edit PRICES)</div>
-</div>
+        --r-lg: 22px;
+        --r-md: 14px;
+        --r-sm: 10px;
+      }
 
-<h2>1 · Live transcription</h2>
-<button id="rec">Start recording</button>
-<label class="filelabel">📁 Transcribe a file<input type="file" id="file" accept="audio/*" hidden></label>
-<span id="recStatus" class="status"></span>
-<div id="transcript" class="box" contenteditable spellcheck="false"></div>
-<div class="legend">stop / file upload runs speaker diarization in the enclave (sherpa-onnx pyannote) and labels each turn</div>
+      * {
+        box-sizing: border-box;
+      }
 
-<h2>2 · Summarize / extract</h2>
-<button id="summarize" class="secondary">Summarize + action items</button>
-<span id="sumStatus" class="status"></span>
-<div id="summary" class="box"></div>
+      html {
+        scroll-behavior: smooth;
+      }
 
-<h2>3 · Agent (acts on the transcript)</h2>
-<textarea id="ask" rows="2" placeholder="e.g. Save the action items as notes, then tell me the time."></textarea>
-<div style="margin-top:8px"><button id="send" class="secondary">Send</button>
-<span id="agentStatus" class="status"></span></div>
-<div id="chat" class="box"></div>
+      body {
+        font-family: var(--body);
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
 
-<script>
-const SEG_MS = 4000;
-const MODEL = 'anthropic/claude-haiku-4-5';
-const $ = id => document.getElementById(id);
-const transcriptEl = $('transcript');
+      /* atmosphere: coral glow + faint grid, lifted from PRISM photos */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        background:
+          radial-gradient(
+            900px 480px at 78% -8%,
+            rgba(255, 92, 60, 0.18),
+            transparent 60%
+          ),
+          radial-gradient(
+            700px 500px at 8% 4%,
+            rgba(95, 139, 255, 0.06),
+            transparent 55%
+          );
+        pointer-events: none;
+      }
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+          linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.022) 1px,
+            transparent 1px
+          );
+        background-size: 46px 46px;
+        -webkit-mask-image: radial-gradient(
+          ellipse 120% 90% at 50% 0%,
+          #000 25%,
+          transparent 80%
+        );
+        mask-image: radial-gradient(
+          ellipse 120% 90% at 50% 0%,
+          #000 25%,
+          transparent 80%
+        );
+        pointer-events: none;
+      }
 
-// ---- cost model (ESTIMATE — per 1M tokens / per audio-minute; edit to match near.ai) ----
-const PRICES = {
-  'anthropic/claude-haiku-4-5': { in: 1.00, out: 5.00 },  // $ / 1M tokens
-  whisper: 0.006,                                          // $ / audio-minute
-};
-const tokCost = (m, pt, ct) => (PRICES[m] ? (pt * PRICES[m].in + ct * PRICES[m].out) / 1e6 : 0);
-const audioCost = sec => (sec / 60) * PRICES.whisper;
+      .wrap {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 22px 20px 90px;
+      }
 
-// ---- network scope (waterfall) ----
-const scope = (() => {
-  const cv = $('scope'), ctx = cv.getContext('2d');
-  let W = 0, H = 0, COLS = 0;
-  const fit = () => { W = cv.width = cv.clientWidth * devicePixelRatio;
-    H = cv.height = cv.clientHeight * devicePixelRatio; COLS = Math.floor(W / (2 * devicePixelRatio)); };
-  addEventListener('resize', fit); fit();
-  let out = [], inb = [], accOut = 0, accIn = 0, last = 0;
-  const C = { outT: 0, outB: 0, inT: 0, seg: 0, rt: 0, sec: 0, cost: 0, t0: 0 };
+      /* ---------- entrance ---------- */
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .rise {
+        animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      }
 
-  function push(arr, v) { arr.push(v); while (arr.length > COLS) arr.shift(); }
-  function draw(ts) {
-    if (!last) last = ts;
-    if (ts - last >= 45) { push(out, accOut); push(inb, accIn); accOut = accIn = 0; last = ts; }
-    const max = Math.max(1, ...out, ...inb);
-    ctx.clearRect(0, 0, W, H);
-    const mid = H / 2, colW = W / COLS;
-    ctx.strokeStyle = '#1c2128'; ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
-    for (let i = 0; i < out.length; i++) {
-      const x = i * colW;
-      const oh = (out[i] / max) * (mid - 2), ih = (inb[i] / max) * (mid - 2);
-      const lead = i >= out.length - 2;
-      if (oh > 0) { ctx.fillStyle = lead ? '#9ab8ff' : '#5f8bff'; ctx.fillRect(x, mid - oh, colW + 1, oh); }
-      if (ih > 0) { ctx.fillStyle = lead ? '#7ff0c2' : '#46d39a'; ctx.fillRect(x, mid, colW + 1, ih); }
-    }
-    hud();
-    requestAnimationFrame(draw);
-  }
-  function hud() {
-    $('hOutT').textContent = C.outT; $('hOutB').textContent = (C.outB / 1024).toFixed(1);
-    $('hInT').textContent = C.inT; $('hSeg').textContent = C.seg;
-    $('hRt').textContent = C.rt; $('hSec').textContent = C.sec.toFixed(1);
-    const el = C.t0 ? (Date.now() - C.t0) / 1000 : 0;
-    $('hEl').textContent = `${Math.floor(el / 60)}:${String(Math.floor(el % 60)).padStart(2, '0')}`;
-    $('hCost').textContent = '$' + C.cost.toFixed(4);
-    $('hBurn').textContent = '$' + (el > 1 ? C.cost / (el / 60) : 0).toFixed(2);
-  }
-  requestAnimationFrame(draw);
-  const tick = () => { if (!C.t0) C.t0 = Date.now(); C.rt++; };
-  return {
-    audioOut: bytes => { tick(); accOut += bytes / 200; C.outB += bytes; },
-    promptTok: n => { accOut += n; C.outT += n; },
-    inTok: n => { accIn += n; C.inT += n; },
-    seg: (n, sec) => { C.seg = Math.max(C.seg, n); C.sec += sec || 0; C.cost += audioCost(sec || 0); },
-    cost: (m, pt, ct) => { C.cost += tokCost(m, pt, ct); },
-  };
-})();
+      /* ---------- nav pill ---------- */
+      nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 10px 12px 10px 18px;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.03),
+          rgba(255, 255, 255, 0)
+        );
+        backdrop-filter: blur(6px);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+      .brand .mark {
+        width: 30px;
+        height: 30px;
+        flex: none;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        color: var(--accent);
+        background: #0a0b0d;
+      }
+      .brand .mark svg {
+        width: 18px;
+        height: 18px;
+      }
+      .brand .name {
+        font-family: var(--display);
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+      }
+      .brand .name span {
+        color: var(--faint);
+        font-weight: 500;
+      }
+      .navlinks {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .navlinks a {
+        font-family: var(--display);
+        font-size: 0.68rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+        text-decoration: none;
+        padding: 8px 12px;
+        border-radius: 999px;
+        transition:
+          color 0.2s,
+          background 0.2s;
+        white-space: nowrap;
+      }
+      .navlinks a:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .tee-pill {
+        font-family: var(--display);
+        font-size: 0.66rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 8px 13px 8px 11px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+      .tee-pill .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--mint);
+        box-shadow: 0 0 0 0 rgba(95, 214, 168, 0.6);
+        animation: pulse 2.4s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(95, 214, 168, 0.55);
+        }
+        70% {
+          box-shadow: 0 0 0 7px rgba(95, 214, 168, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(95, 214, 168, 0);
+        }
+      }
 
-// ---- live transcription ----
-let recorder = null, stream = null, chunks = [], timer = null, busy = false;
+      /* ---------- hero ---------- */
+      header.hero {
+        margin: 30px 2px 26px;
+      }
+      h1.title {
+        font-family: var(--display);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: -0.005em;
+        line-height: 0.92;
+        margin: 0;
+        font-size: clamp(2.6rem, 8.6vw, 6.2rem);
+        background: linear-gradient(180deg, #ffffff 0%, #c9c8c4 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 60px rgba(255, 92, 60, 0.12);
+      }
+      .subrow {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .subtitle {
+        font-family: var(--display);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: clamp(0.74rem, 1.7vw, 0.98rem);
+        color: var(--muted);
+        max-width: 640px;
+      }
+      .heroCta {
+        font-family: var(--display);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.82rem;
+        color: var(--text);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 2px solid var(--accent);
+        padding-bottom: 3px;
+        white-space: nowrap;
+        transition:
+          gap 0.2s,
+          color 0.2s;
+      }
+      .heroCta:hover {
+        gap: 12px;
+        color: var(--accent-dim);
+      }
 
-$('rec').onclick = async () => {
-  if (recorder) { stopRecording(); return; }
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  chunks = [];
-  recorder = new MediaRecorder(stream);
-  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
-  recorder.start(1000);
-  $('rec').classList.add('recording');
-  $('rec').textContent = 'Stop recording';
-  $('recStatus').textContent = 'listening…';
-  timer = setInterval(refresh, SEG_MS);
-};
+      /* ---------- cards ---------- */
+      .card {
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        background:
+          linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.025),
+            rgba(255, 255, 255, 0) 40%
+          ),
+          var(--surface);
+        padding: 16px;
+        margin-top: 16px;
+      }
+      .card.feature {
+        padding: 12px;
+      }
 
-async function refresh(final) {
-  if ((busy && !final) || !chunks.length) return;
-  busy = true;
-  $('recStatus').textContent = final ? 'finalizing (diarizing)…' : 'transcribing…';
-  const blob = new Blob(chunks, { type: recorder.mimeType });
-  const r = final ? await transcribeDiarized(blob) : await transcribeBlob(blob);
-  if (r) showTranscript(r);
-  $('recStatus').textContent = final ? '' : 'listening…';
-  busy = false;
-}
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 4px 6px 14px;
+        flex-wrap: wrap;
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        font-family: var(--display);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.72rem;
+        color: var(--text);
+      }
+      .tag .num {
+        color: var(--accent);
+      }
+      .tag svg {
+        width: 15px;
+        height: 15px;
+        color: var(--faint);
+        flex: none;
+      }
+      .tag-r {
+        font-family: var(--display);
+        font-size: 0.64rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--faint);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tag-r svg {
+        width: 14px;
+        height: 14px;
+      }
 
-function showTranscript(r) {
-  if (Array.isArray(r.segments)) renderDiarized(r.segments);
-  else if (r.text) transcriptEl.textContent = r.text.trim();
-  if (r.text) scope.inTok(Math.ceil(r.text.length / 4));
-  scope.seg(Array.isArray(r.segments) ? r.segments.length : (r.segments || 0), r.duration || 0);
-}
+      /* ---------- network scope (the "hero media" card) ---------- */
+      #scopeWrap {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        background: #07080a;
+        padding: 12px;
+        position: relative;
+        overflow: hidden;
+      }
+      #scopeWrap::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          420px 160px at 85% 0%,
+          rgba(255, 92, 60, 0.1),
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+      #scope {
+        width: 100%;
+        height: 150px;
+        display: block;
+        border-radius: var(--r-sm);
+        background: #060708;
+        position: relative;
+      }
+      .hud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+        margin-top: 12px;
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        position: relative;
+      }
+      .hud span {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 5px;
+      }
+      .hud b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .hud .out b {
+        color: var(--accent);
+      }
+      .hud .in b {
+        color: var(--mint);
+      }
+      .hud .cost b {
+        color: var(--amber);
+      }
+      .legend {
+        font-family: var(--mono);
+        font-size: 0.68rem;
+        color: var(--faint);
+        margin-top: 8px;
+        position: relative;
+      }
 
-function renderDiarized(segs) {
-  transcriptEl.innerHTML = '';
-  let cur = null;
-  for (const s of segs) {
-    if (!cur || cur.speaker !== s.speaker) {
-      cur = { speaker: s.speaker, text: s.text.trim() };
-      const tag = document.createElement('span');
-      tag.className = 'spk s' + (parseInt((s.speaker || '').slice(-2), 10) % 4);
-      tag.textContent = (s.speaker || '?') + ': ';
-      transcriptEl.appendChild(tag);
-      cur.node = transcriptEl.appendChild(document.createTextNode(cur.text + '\n'));
-    } else {
-      cur.text += ' ' + s.text.trim();
-      cur.node.textContent = cur.text + '\n';
-    }
-  }
-}
+      /* ---------- output boxes ---------- */
+      .box {
+        background: var(--surface-2);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--r-md);
+        padding: 15px 16px;
+        white-space: pre-wrap;
+        min-height: 46px;
+        margin-top: 12px;
+        font-family: var(--mono);
+        font-size: 0.86rem;
+        line-height: 1.6;
+        color: #dcdcd9;
+      }
+      #transcript[contenteditable] {
+        outline: none;
+        border-color: var(--border);
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+      #transcript[contenteditable]:empty::before {
+        content: "your live transcript will appear here…";
+        color: var(--faint);
+      }
+      #transcript[contenteditable]:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(255, 92, 60, 0.12);
+      }
+      #summary:empty::before {
+        content: "summary + action items appear here…";
+        color: var(--faint);
+      }
+      #diar:empty::before {
+        content: "speaker-labelled transcript appears here…";
+        color: var(--faint);
+      }
+      #chat:empty::before {
+        content: "agent activity appears here…";
+        color: var(--faint);
+      }
 
-async function stopRecording() {
-  clearInterval(timer);
-  $('rec').classList.remove('recording');
-  $('rec').textContent = 'Start recording';
-  await new Promise(res => { recorder.onstop = res; recorder.stop(); });
-  stream.getTracks().forEach(t => t.stop());
-  await refresh(true);
-  recorder = null;
-}
+      /* ---------- buttons ---------- */
+      button {
+        font-family: var(--display);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 0.76rem;
+        padding: 12px 20px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        cursor: pointer;
+        background: var(--text);
+        color: #0a0a0a;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        transition:
+          transform 0.12s ease,
+          background 0.2s,
+          color 0.2s,
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+      }
+      button:active {
+        transform: translateY(0);
+      }
+      button:disabled {
+        opacity: 0.35;
+        cursor: default;
+        transform: none;
+        box-shadow: none;
+      }
 
-async function transcribeBlob(blob) {
-  scope.audioOut(blob.size);
-  const fd = new FormData();
-  fd.append('file', blob, 'audio.webm');
-  const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
-  return r.ok ? r.json() : null;
-}
+      /* primary CTA (#rec) gets a play / stop glyph that survives JS text swaps */
+      #rec::after {
+        content: "▸";
+        font-size: 0.9em;
+        line-height: 1;
+      }
+      #rec.recording::after {
+        content: "■";
+        font-size: 0.72em;
+      }
 
-async function transcribeDiarized(blob) {
-  scope.audioOut(blob.size);
-  const fd = new FormData();
-  fd.append('file', blob, blob.name || 'audio.webm');
-  const r = await fetch('/api/transcribe_diarized', { method: 'POST', body: fd });
-  return r.ok ? r.json() : null;
-}
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      button.secondary:hover {
+        border-color: #3a3d46;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      /* trailing arrow on action buttons that don't toggle their own glyph */
+      button.secondary:not(#spkRec):not(#diarRec)::after {
+        content: "▸";
+        color: var(--accent);
+        font-size: 0.9em;
+        line-height: 1;
+      }
 
-$('file').onchange = async e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  $('recStatus').textContent = 'transcribing + diarizing…';
-  const r = await transcribeDiarized(f);
-  $('recStatus').textContent = r ? '' : 'failed';
-  if (r) showTranscript(r);
-  e.target.value = '';
-};
+      #rec.recording,
+      #spkRec.recording,
+      #diarRec.recording {
+        background: var(--accent);
+        color: #160503;
+        border-color: var(--accent);
+        animation: rec 1.4s ease-in-out infinite;
+      }
+      @keyframes rec {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(255, 92, 60, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 0 8px rgba(255, 92, 60, 0);
+        }
+      }
 
-// ---- summarize (streaming) ----
-$('summarize').onclick = async () => {
-  const text = transcriptEl.textContent.trim();
-  if (!text) { $('sumStatus').textContent = 'no transcript yet'; return; }
-  $('sumStatus').textContent = 'streaming…';
-  $('summary').textContent = '';
-  const messages = [
-    { role: 'system', content: 'Summarize the transcript in 2-3 sentences, then list action items as bullets. If there are none, say so.' },
-    { role: 'user', content: text },
-  ];
-  scope.promptTok(Math.ceil(text.length / 4));
-  await streamChat(messages, t => { $('summary').textContent += t; });
-  $('sumStatus').textContent = '';
-};
+      /* ---------- inputs ---------- */
+      input[type="text"],
+      input.txt,
+      textarea {
+        font-family: var(--mono);
+        font-size: 0.84rem;
+        color: var(--text);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        padding: 11px 13px;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+      input[type="text"]:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(255, 92, 60, 0.12);
+      }
+      input[type="text"]::placeholder,
+      textarea::placeholder {
+        color: var(--faint);
+      }
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        resize: vertical;
+      }
+      input[type="file"] {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        color: var(--muted);
+        max-width: 100%;
+      }
+      input[type="file"]::file-selector-button {
+        font-family: var(--display);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.68rem;
+        font-weight: 600;
+        margin-right: 10px;
+        padding: 8px 13px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
+      }
+      input[type="file"]::file-selector-button:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: #3a3d46;
+      }
 
-async function streamChat(messages, onDelta) {
-  const r = await fetch('/api/chat/stream', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, model: MODEL }),
-  });
-  const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const lines = buf.split('\n'); buf = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data:')) continue;
-      const data = line.slice(5).trim();
-      if (data === '[DONE]') continue;
-      let j; try { j = JSON.parse(data); } catch { continue; }
-      const delta = j.choices?.[0]?.delta?.content;
-      if (delta) { onDelta(delta); scope.inTok(Math.max(1, Math.ceil(delta.length / 4))); }
-      if (j.usage) scope.cost(MODEL, j.usage.prompt_tokens, j.usage.completion_tokens);
-    }
-  }
-}
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .row.mt {
+        margin-top: 14px;
+      }
 
-// ---- agent ----
-const chatEl = $('chat');
-let history = [];
+      .status {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.76rem;
+        letter-spacing: 0.01em;
+      }
+      #spkList {
+        display: block;
+        margin-top: 8px;
+      }
+      .sep {
+        color: var(--faint);
+        font-family: var(--mono);
+        font-size: 0.76rem;
+      }
 
-$('send').onclick = async () => {
-  const ask = $('ask').value.trim();
-  if (!ask) return;
-  $('ask').value = '';
-  const transcript = transcriptEl.textContent.trim();
-  if (!history.length) history.push({ role: 'system',
-    content: 'You are an assistant acting on a meeting transcript. Use tools when helpful. Transcript:\n' + transcript });
-  history.push({ role: 'user', content: ask });
-  addMsg('user', ask);
-  $('agentStatus').textContent = 'working…';
-  scope.promptTok(Math.ceil((transcript + ask).length / 4));
-  const r = await fetch('/api/agent', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: history, model: MODEL }),
-  });
-  const j = await r.json();
-  $('agentStatus').textContent = '';
-  if (!r.ok) { addMsg('tool', JSON.stringify(j)); return; }
-  history = j.messages;
-  if (j.usage) { scope.cost(MODEL, j.usage.prompt_tokens, j.usage.completion_tokens);
-    scope.inTok(j.usage.completion_tokens); }
-  for (const m of history) {
-    if (m.role === 'tool') continue;
-    if (m.role === 'assistant' && m.tool_calls)
-      m.tool_calls.forEach(c => renderToolOnce(c.id, c.function.name + '(' + c.function.arguments + ')'));
-  }
-  addMsg('assistant', j.reply);
-};
+      /* ---------- agent chat / diarization turns ---------- */
+      .msg {
+        margin: 9px 0;
+        font-family: var(--mono);
+        font-size: 0.84rem;
+        line-height: 1.6;
+      }
+      .msg.user {
+        color: var(--mint);
+      }
+      .msg.assistant {
+        color: #e8e7e3;
+      }
+      .msg.tool {
+        color: var(--amber);
+        font-size: 0.76rem;
+      }
 
-const shownTools = new Set();
-function renderToolOnce(id, label) {
-  if (shownTools.has(id)) return;
-  shownTools.add(id);
-  addMsg('tool', '🔧 ' + label);
-}
-function addMsg(role, text) {
-  const d = document.createElement('div');
-  d.className = 'msg ' + role;
-  d.textContent = (role === 'user' ? 'you: ' : '') + text;
-  chatEl.appendChild(d);
-}
-</script>
-</body>
+      .turn {
+        margin: 9px 0;
+        font-family: var(--mono);
+        font-size: 0.84rem;
+        line-height: 1.6;
+      }
+      .who {
+        font-family: var(--display);
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        padding: 2px 9px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        margin-right: 9px;
+        color: #0a0a0a;
+      }
+
+      footer {
+        margin-top: 34px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border-soft);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        font-family: var(--display);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        font-size: 0.64rem;
+        color: var(--faint);
+      }
+      footer .mark {
+        color: var(--accent);
+        display: inline-flex;
+      }
+      footer .mark svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      @media (max-width: 560px) {
+        .navlinks {
+          display: none;
+        }
+        .wrap {
+          padding: 16px 14px 70px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav class="rise">
+        <div class="brand">
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4"
+                stroke="currentColor"
+                stroke-width="1.4"
+              />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4"
+                stroke="currentColor"
+                stroke-width="1.4"
+                transform="rotate(60 12 12)"
+              />
+              <ellipse
+                cx="12"
+                cy="12"
+                rx="10"
+                ry="4"
+                stroke="currentColor"
+                stroke-width="1.4"
+                transform="rotate(120 12 12)"
+              />
+            </svg>
+          </span>
+          <span class="name">NEAR <span>·</span> TRANSCRIPTS</span>
+        </div>
+        <div class="navlinks">
+          <a href="#sec-live">Transcribe</a>
+          <a href="#sec-speakers">Speakers</a>
+          <a href="#sec-summary">Summary</a>
+          <a href="#sec-agent">Agent</a>
+          <span class="tee-pill"><span class="dot"></span> TEE Online</span>
+        </div>
+      </nav>
+
+      <header class="hero rise" style="animation-delay: 0.06s">
+        <h1 class="title">Agentic<br />Transcripts</h1>
+        <div class="subrow">
+          <p class="subtitle">
+            Where speech, speakers, and action items converge — privately
+          </p>
+          <a class="heroCta" href="#sec-scope"
+            >Secured in TEE <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </header>
+
+      <!-- ===== NETWORK SCOPE ===== -->
+      <section
+        id="sec-scope"
+        class="card feature rise"
+        style="animation-delay: 0.12s"
+      >
+        <div class="card-head">
+          <span class="tag">
+            <svg viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2 2H6M2 2V6M14 2H10M14 2V6M2 14H6M2 14V10M14 14H10M14 14V10"
+                stroke="currentColor"
+                stroke-width="1.3"
+              />
+              <circle cx="8" cy="8" r="1.7" fill="currentColor" />
+            </svg>
+            Network Scope
+          </span>
+          <span class="tag-r">
+            Phala TEE · Encrypted Enclave
+            <svg viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2 2H6M2 2V6M14 2H10M14 2V6M2 14H6M2 14V10M14 14H10M14 14V10"
+                stroke="currentColor"
+                stroke-width="1.3"
+              />
+              <circle cx="8" cy="8" r="1.7" fill="currentColor" />
+            </svg>
+          </span>
+        </div>
+        <div id="scopeWrap">
+          <canvas id="scope"></canvas>
+          <div class="hud">
+            <span class="out"
+              >⬆ out <b id="hOutT">0</b> tok · <b id="hOutB">0</b> KB</span
+            >
+            <span class="in"
+              >⬇ in <b id="hInT">0</b> tok · <b id="hSeg">0</b> seg</span
+            >
+            <span>⇄ <b id="hRt">0</b> calls · <b id="hSec">0.0</b>s audio</span>
+            <span>⏱ <b id="hEl">0:00</b></span>
+            <span class="cost"
+              >💸 <b id="hCost">$0.0000</b> est ·
+              <b id="hBurn">$0.00</b>/min</span
+            >
+          </div>
+          <div class="legend">
+            coral = bytes / tokens leaving the enclave · mint = tokens streaming
+            back · $ is an estimate (edit PRICES)
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 1 · LIVE TRANSCRIPTION ===== -->
+      <section id="sec-live" class="card rise" style="animation-delay: 0.18s">
+        <div class="card-head">
+          <span class="tag"
+            ><span class="num">01</span> Live Transcription</span
+          >
+          <span class="tag-r">Real-time</span>
+        </div>
+        <div class="row">
+          <button id="rec">Start recording</button>
+          <span id="recStatus" class="status"></span>
+        </div>
+        <div
+          id="transcript"
+          class="box"
+          contenteditable
+          spellcheck="false"
+        ></div>
+      </section>
+
+      <!-- ===== 2 · SPEAKER IDENTIFICATION ===== -->
+      <section
+        id="sec-speakers"
+        class="card rise"
+        style="animation-delay: 0.24s"
+      >
+        <div class="card-head">
+          <span class="tag"
+            ><span class="num">02</span> Speaker Identification</span
+          >
+          <span class="tag-r">Voiceprints never leave the TEE</span>
+        </div>
+        <div class="row">
+          <input id="spkName" type="text" placeholder="person's name" />
+          <input id="spkFile" type="file" accept="audio/*" hidden />
+          <button id="spkEnroll" class="secondary">Enroll from file</button>
+          <span class="sep">or</span>
+          <button id="spkRec" class="secondary">● Record</button>
+          <span id="spkStatus" class="status"></span>
+        </div>
+        <div id="spkList" class="status"></div>
+        <div class="row mt">
+          <input id="diarFile" type="file" accept="audio/*" hidden />
+          <button id="diarBtn" class="secondary">
+            Transcribe file with speakers
+          </button>
+          <span class="sep">or</span>
+          <button id="diarRec" class="secondary">● Record meeting</button>
+          <span id="diarStatus" class="status"></span>
+        </div>
+        <div id="diar" class="box"></div>
+      </section>
+
+      <!-- ===== 3 · SUMMARIZE ===== -->
+      <section id="sec-summary" class="card rise" style="animation-delay: 0.3s">
+        <div class="card-head">
+          <span class="tag"
+            ><span class="num">03</span> Summarize / Extract</span
+          >
+          <span class="tag-r">Streaming</span>
+        </div>
+        <div class="row">
+          <button id="summarize" class="secondary">
+            Summarize + action items
+          </button>
+          <span id="sumStatus" class="status"></span>
+        </div>
+        <div id="summary" class="box"></div>
+      </section>
+
+      <!-- ===== 4 · AGENT ===== -->
+      <section id="sec-agent" class="card rise" style="animation-delay: 0.36s">
+        <div class="card-head">
+          <span class="tag"
+            ><span class="num">04</span> Agent · Acts on the Transcript</span
+          >
+          <span class="tag-r">Tool-using</span>
+        </div>
+        <textarea
+          id="ask"
+          rows="2"
+          placeholder="e.g. Save the action items as notes, then tell me the time."
+        ></textarea>
+        <div class="row mt">
+          <button id="send" class="secondary">Send</button>
+          <span id="agentStatus" class="status"></span>
+        </div>
+        <div id="chat" class="box"></div>
+      </section>
+
+      <footer>
+        <span>Running in a Phala TEE</span>
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+            <ellipse
+              cx="12"
+              cy="12"
+              rx="10"
+              ry="4"
+              stroke="currentColor"
+              stroke-width="1.4"
+            />
+            <ellipse
+              cx="12"
+              cy="12"
+              rx="10"
+              ry="4"
+              stroke="currentColor"
+              stroke-width="1.4"
+              transform="rotate(60 12 12)"
+            />
+            <ellipse
+              cx="12"
+              cy="12"
+              rx="10"
+              ry="4"
+              stroke="currentColor"
+              stroke-width="1.4"
+              transform="rotate(120 12 12)"
+            />
+          </svg>
+        </span>
+        <span>Voiceprints stay in the enclave</span>
+      </footer>
+    </div>
+
+    <script>
+      const SEG_MS = 4000;
+      const MODEL = "anthropic/claude-haiku-4-5";
+      const $ = (id) => document.getElementById(id);
+      const transcriptEl = $("transcript");
+
+      // ---- cost model (ESTIMATE — per 1M tokens / per audio-minute; edit to match near.ai) ----
+      const PRICES = {
+        "anthropic/claude-haiku-4-5": { in: 1.0, out: 5.0 }, // $ / 1M tokens
+        whisper: 0.006, // $ / audio-minute
+      };
+      const tokCost = (m, pt, ct) =>
+        PRICES[m] ? (pt * PRICES[m].in + ct * PRICES[m].out) / 1e6 : 0;
+      const audioCost = (sec) => (sec / 60) * PRICES.whisper;
+
+      // ---- network scope (waterfall) ----
+      const scope = (() => {
+        const cv = $("scope"),
+          ctx = cv.getContext("2d");
+        let W = 0,
+          H = 0,
+          COLS = 0;
+        const fit = () => {
+          W = cv.width = cv.clientWidth * devicePixelRatio;
+          H = cv.height = cv.clientHeight * devicePixelRatio;
+          COLS = Math.floor(W / (2 * devicePixelRatio));
+        };
+        addEventListener("resize", fit);
+        fit();
+        let out = [],
+          inb = [],
+          accOut = 0,
+          accIn = 0,
+          last = 0;
+        const C = {
+          outT: 0,
+          outB: 0,
+          inT: 0,
+          seg: 0,
+          rt: 0,
+          sec: 0,
+          cost: 0,
+          t0: 0,
+        };
+
+        function push(arr, v) {
+          arr.push(v);
+          while (arr.length > COLS) arr.shift();
+        }
+        function draw(ts) {
+          if (!last) last = ts;
+          if (ts - last >= 45) {
+            push(out, accOut);
+            push(inb, accIn);
+            accOut = accIn = 0;
+            last = ts;
+          }
+          const max = Math.max(1, ...out, ...inb);
+          ctx.clearRect(0, 0, W, H);
+          const mid = H / 2,
+            colW = W / COLS;
+          ctx.strokeStyle = "#23252b";
+          ctx.beginPath();
+          ctx.moveTo(0, mid);
+          ctx.lineTo(W, mid);
+          ctx.stroke();
+          for (let i = 0; i < out.length; i++) {
+            const x = i * colW;
+            const oh = (out[i] / max) * (mid - 2),
+              ih = (inb[i] / max) * (mid - 2);
+            const lead = i >= out.length - 2;
+            if (oh > 0) {
+              ctx.fillStyle = lead ? "#ff8366" : "#ff5c3c";
+              ctx.fillRect(x, mid - oh, colW + 1, oh);
+            }
+            if (ih > 0) {
+              ctx.fillStyle = lead ? "#8af0c8" : "#5fd6a8";
+              ctx.fillRect(x, mid, colW + 1, ih);
+            }
+          }
+          hud();
+          requestAnimationFrame(draw);
+        }
+        function hud() {
+          $("hOutT").textContent = C.outT;
+          $("hOutB").textContent = (C.outB / 1024).toFixed(1);
+          $("hInT").textContent = C.inT;
+          $("hSeg").textContent = C.seg;
+          $("hRt").textContent = C.rt;
+          $("hSec").textContent = C.sec.toFixed(1);
+          const el = C.t0 ? (Date.now() - C.t0) / 1000 : 0;
+          $("hEl").textContent =
+            `${Math.floor(el / 60)}:${String(Math.floor(el % 60)).padStart(2, "0")}`;
+          $("hCost").textContent = "$" + C.cost.toFixed(4);
+          $("hBurn").textContent =
+            "$" + (el > 1 ? C.cost / (el / 60) : 0).toFixed(2);
+        }
+        requestAnimationFrame(draw);
+        const tick = () => {
+          if (!C.t0) C.t0 = Date.now();
+          C.rt++;
+        };
+        return {
+          audioOut: (bytes) => {
+            tick();
+            accOut += bytes / 200;
+            C.outB += bytes;
+          },
+          promptTok: (n) => {
+            accOut += n;
+            C.outT += n;
+          },
+          inTok: (n) => {
+            accIn += n;
+            C.inT += n;
+          },
+          seg: (n, sec) => {
+            C.seg = Math.max(C.seg, n);
+            C.sec += sec || 0;
+            C.cost += audioCost(sec || 0);
+          },
+          cost: (m, pt, ct) => {
+            C.cost += tokCost(m, pt, ct);
+          },
+        };
+      })();
+
+      // ---- live transcription ----
+      let recorder = null,
+        stream = null,
+        chunks = [],
+        timer = null,
+        busy = false;
+
+      $("rec").onclick = async () => {
+        if (recorder) {
+          stopRecording();
+          return;
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        chunks = [];
+        recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+        recorder.start(1000);
+        $("rec").classList.add("recording");
+        $("rec").textContent = "Stop recording";
+        $("recStatus").textContent = "listening…";
+        timer = setInterval(refresh, SEG_MS);
+      };
+
+      async function refresh(final) {
+        if ((busy && !final) || !chunks.length) return;
+        busy = true;
+        $("recStatus").textContent = final ? "finalizing…" : "transcribing…";
+        const r = await transcribeBlob(
+          new Blob(chunks, { type: recorder.mimeType }),
+        );
+        if (r && r.text) {
+          transcriptEl.textContent = r.text.trim();
+          scope.inTok(Math.ceil(r.text.length / 4));
+          scope.seg(r.segments || 0, r.duration || 0);
+        }
+        $("recStatus").textContent = final ? "" : "listening…";
+        busy = false;
+      }
+
+      async function stopRecording() {
+        clearInterval(timer);
+        $("rec").classList.remove("recording");
+        $("rec").textContent = "Start recording";
+        await new Promise((res) => {
+          recorder.onstop = res;
+          recorder.stop();
+        });
+        stream.getTracks().forEach((t) => t.stop());
+        await refresh(true);
+        recorder = null;
+      }
+
+      async function transcribeBlob(blob) {
+        scope.audioOut(blob.size);
+        const fd = new FormData();
+        fd.append("file", blob, "audio.webm");
+        const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+        return r.ok ? r.json() : null;
+      }
+
+      // ---- summarize (streaming) ----
+      $("summarize").onclick = async () => {
+        const text = transcriptEl.textContent.trim();
+        if (!text) {
+          $("sumStatus").textContent = "no transcript yet";
+          return;
+        }
+        $("sumStatus").textContent = "streaming…";
+        $("summary").textContent = "";
+        const messages = [
+          {
+            role: "system",
+            content:
+              "Summarize the transcript in 2-3 sentences, then list action items as bullets. If there are none, say so.",
+          },
+          { role: "user", content: text },
+        ];
+        scope.promptTok(Math.ceil(text.length / 4));
+        await streamChat(messages, (t) => {
+          $("summary").textContent += t;
+        });
+        $("sumStatus").textContent = "";
+      };
+
+      async function streamChat(messages, onDelta) {
+        const r = await fetch("/api/chat/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages, model: MODEL }),
+        });
+        const reader = r.body.getReader(),
+          dec = new TextDecoder();
+        let buf = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5).trim();
+            if (data === "[DONE]") continue;
+            let j;
+            try {
+              j = JSON.parse(data);
+            } catch {
+              continue;
+            }
+            const delta = j.choices?.[0]?.delta?.content;
+            if (delta) {
+              onDelta(delta);
+              scope.inTok(Math.max(1, Math.ceil(delta.length / 4)));
+            }
+            if (j.usage)
+              scope.cost(
+                MODEL,
+                j.usage.prompt_tokens,
+                j.usage.completion_tokens,
+              );
+          }
+        }
+      }
+
+      // ---- agent ----
+      const chatEl = $("chat");
+      let history = [];
+
+      $("send").onclick = async () => {
+        const ask = $("ask").value.trim();
+        if (!ask) return;
+        $("ask").value = "";
+        const transcript = transcriptEl.textContent.trim();
+        if (!history.length)
+          history.push({
+            role: "system",
+            content:
+              "You are an assistant acting on a meeting transcript. Use tools when helpful. Transcript:\n" +
+              transcript,
+          });
+        history.push({ role: "user", content: ask });
+        addMsg("user", ask);
+        $("agentStatus").textContent = "working…";
+        scope.promptTok(Math.ceil((transcript + ask).length / 4));
+        const r = await fetch("/api/agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: history, model: MODEL }),
+        });
+        const j = await r.json();
+        $("agentStatus").textContent = "";
+        if (!r.ok) {
+          addMsg("tool", JSON.stringify(j));
+          return;
+        }
+        history = j.messages;
+        if (j.usage) {
+          scope.cost(MODEL, j.usage.prompt_tokens, j.usage.completion_tokens);
+          scope.inTok(j.usage.completion_tokens);
+        }
+        for (const m of history) {
+          if (m.role === "tool") continue;
+          if (m.role === "assistant" && m.tool_calls)
+            m.tool_calls.forEach((c) =>
+              renderToolOnce(
+                c.id,
+                c.function.name + "(" + c.function.arguments + ")",
+              ),
+            );
+        }
+        addMsg("assistant", j.reply);
+      };
+
+      const shownTools = new Set();
+      function renderToolOnce(id, label) {
+        if (shownTools.has(id)) return;
+        shownTools.add(id);
+        addMsg("tool", "🔧 " + label);
+      }
+      function addMsg(role, text) {
+        const d = document.createElement("div");
+        d.className = "msg " + role;
+        d.textContent = (role === "user" ? "you: " : "") + text;
+        chatEl.appendChild(d);
+      }
+
+      // ---- speaker identification ----
+      const SPK_COLORS = [
+        "#ff5c3c",
+        "#5fd6a8",
+        "#ffcf5f",
+        "#ff7fb0",
+        "#c8a36a",
+        "#9a7fff",
+        "#7fd3ff",
+      ];
+      const spkColor = (s) =>
+        s < 0 ? "#6b7280" : SPK_COLORS[s % SPK_COLORS.length];
+
+      async function refreshVoiceprints() {
+        const r = await fetch("/api/voiceprints");
+        if (!r.ok) return;
+        const { names } = await r.json();
+        $("spkList").textContent = names.length
+          ? "enrolled: " +
+            names
+              .map(
+                (n) => `${n.name} (${n.clips} clip${n.clips > 1 ? "s" : ""})`,
+              )
+              .join(" · ")
+          : "no voiceprints enrolled yet";
+      }
+
+      async function submitEnroll(name, blob, filename) {
+        $("spkStatus").textContent = "enrolling…";
+        const fd = new FormData();
+        fd.append("name", name);
+        fd.append("file", blob, filename);
+        scope.audioOut(blob.size);
+        const r = await fetch("/api/enroll", { method: "POST", body: fd });
+        $("spkStatus").textContent = r.ok ? "enrolled ✓" : "failed";
+        if (r.ok) {
+          $("spkName").value = "";
+          $("spkFile").value = "";
+          refreshVoiceprints();
+        }
+      }
+
+      // one button: open the file picker, then enroll as soon as a file is chosen
+      $("spkEnroll").onclick = () => {
+        if (!$("spkName").value.trim()) {
+          $("spkStatus").textContent = "enter a name first";
+          return;
+        }
+        $("spkFile").click();
+      };
+      $("spkFile").onchange = () => {
+        const name = $("spkName").value.trim(),
+          f = $("spkFile").files[0];
+        if (!f) return;
+        if (!name) {
+          $("spkStatus").textContent = "enter a name first";
+          $("spkFile").value = "";
+          return;
+        }
+        submitEnroll(name, f, f.name);
+      };
+
+      // record a clip in-browser and enroll it (alternative to picking a file)
+      let enrollRec = null,
+        enrollStream = null,
+        enrollChunks = [];
+      $("spkRec").onclick = async () => {
+        if (enrollRec) {
+          enrollRec.stop();
+          return;
+        } // second click → stop & enroll
+        const name = $("spkName").value.trim();
+        if (!name) {
+          $("spkStatus").textContent = "enter a name first";
+          return;
+        }
+        enrollStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        enrollChunks = [];
+        enrollRec = new MediaRecorder(enrollStream);
+        enrollRec.ondataavailable = (e) =>
+          e.data.size && enrollChunks.push(e.data);
+        enrollRec.onstop = () => {
+          enrollStream.getTracks().forEach((t) => t.stop());
+          const blob = new Blob(enrollChunks, { type: enrollRec.mimeType });
+          enrollRec = null;
+          $("spkRec").classList.remove("recording");
+          $("spkRec").textContent = "● Record";
+          submitEnroll(name, blob, "enroll.webm");
+        };
+        enrollRec.start();
+        $("spkRec").classList.add("recording");
+        $("spkRec").textContent = "■ Stop & enroll";
+        $("spkStatus").textContent = "recording… speak for ~10s, then Stop";
+      };
+
+      async function runDiarize(blob, filename) {
+        $("diarStatus").textContent = "diarizing + transcribing…";
+        $("diar").innerHTML = "";
+        const fd = new FormData();
+        fd.append("file", blob, filename);
+        scope.audioOut(blob.size);
+        const r = await fetch("/api/transcribe_diarized", {
+          method: "POST",
+          body: fd,
+        });
+        if (!r.ok) {
+          $("diarStatus").textContent = "failed";
+          $("diar").textContent = await r.text();
+          return;
+        }
+        const j = await r.json();
+        scope.inTok(Math.ceil((j.text || "").length / 4));
+        scope.seg(j.segments.length, j.duration || 0);
+        for (const s of j.segments) {
+          const turn = document.createElement("div");
+          turn.className = "turn";
+          const who = document.createElement("span");
+          who.className = "who";
+          who.textContent = s.label;
+          who.style.background = spkColor(s.speaker);
+          turn.appendChild(who);
+          turn.appendChild(document.createTextNode(s.text));
+          $("diar").appendChild(turn);
+        }
+        $("diarStatus").textContent =
+          `${Object.keys(j.speakers).length} speaker(s)`;
+      }
+
+      // one button: open the file picker, then transcribe as soon as a file is chosen
+      $("diarBtn").onclick = () => $("diarFile").click();
+      $("diarFile").onchange = () => {
+        const f = $("diarFile").files[0];
+        if (!f) return;
+        runDiarize(f, f.name);
+        $("diarFile").value = "";
+      };
+
+      // record a meeting in-browser, then diarize + identify speakers (alternative to a file)
+      let diarRec = null,
+        diarStream = null,
+        diarChunks = [];
+      $("diarRec").onclick = async () => {
+        if (diarRec) {
+          diarRec.stop();
+          return;
+        } // second click → stop & transcribe
+        diarStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        diarChunks = [];
+        diarRec = new MediaRecorder(diarStream);
+        diarRec.ondataavailable = (e) => e.data.size && diarChunks.push(e.data);
+        diarRec.onstop = () => {
+          diarStream.getTracks().forEach((t) => t.stop());
+          const blob = new Blob(diarChunks, { type: diarRec.mimeType });
+          diarRec = null;
+          $("diarRec").classList.remove("recording");
+          $("diarRec").textContent = "● Record meeting";
+          runDiarize(blob, "meeting.webm");
+        };
+        diarRec.start();
+        $("diarRec").classList.add("recording");
+        $("diarRec").textContent = "■ Stop & transcribe";
+        $("diarStatus").textContent =
+          "recording the meeting… click Stop when done";
+      };
+
+      refreshVoiceprints();
+    </script>
+  </body>
 </html>
