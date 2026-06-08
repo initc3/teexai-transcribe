@@ -9,9 +9,12 @@ the image.
 ## Endpoints
 
 - `GET  /` — static demo UI (`static/index.html`)
-- `POST /api/transcribe` — multipart `file=<audio>`; converted to 16 kHz mono Opus via `ffmpeg`, sent to `whisper-large-v3`
+- `POST /api/transcribe` — multipart `file=<audio>`; decoded to 16 kHz mono via `ffmpeg`, split into ≤45 s windows (near.ai 502s past ~60 s/2 MB), each sent to `whisper-large-v3` and concatenated → `{text, duration, segments:<count>}`
+- `POST /api/transcribe_diarized` — same, plus **in-CVM speaker diarization** (`sherpa-onnx`, pyannote `segmentation-3.0` + wespeaker embeddings, CPU/ONNX, no network) merged onto the transcript by time overlap → `{text, duration, segments:[{start,end,speaker,text}]}`
 - `POST /api/chat` — `{messages, model?}` → chat completion
 - `POST /api/agent` — `{messages, model?}` → tool-using loop (`get_current_time`, `save_note`, `list_notes`)
+
+Diarization models are baked into the image at build time (see `Dockerfile`) so they are covered by the CVM image attestation and nothing is fetched at runtime. Audio is diarized inside the enclave; only per-window audio leaves the CVM, to the near.ai TEE for ASR.
 
 ## Run locally
 
@@ -21,7 +24,9 @@ uv venv && uv pip install -r requirements.txt   # or: pip install -r requirement
 ./run.sh                                         # serves on 127.0.0.1:8000
 ```
 
-Requires `ffmpeg` on the host.
+Requires `ffmpeg` on the host. For diarization, the two ONNX models must exist
+under `models/` (the `Dockerfile` downloads them at build; for local runs fetch
+the same two files into `models/segmentation.onnx` and `models/embedding.onnx`).
 
 ## Build & push image
 

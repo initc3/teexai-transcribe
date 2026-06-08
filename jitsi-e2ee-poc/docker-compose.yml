@@ -1,0 +1,57 @@
+name: jitsi-e2ee-poc
+
+# Pull in the vendored 4-service Jitsi stack (web/prosody/jicofo/jvb).
+include:
+  - jitsi/docker-compose.yml
+
+x-key: &ekey "0123456789abcdef0123456789abcdef"
+x-phrase: &phrase "the quick brown fox jumps over the lazy dog"
+
+services:
+  asr:
+    build: ./asr
+    image: e2ee-asr
+    environment:
+      NEAR_API_KEY: ${NEAR_API_KEY:?run.sh loads this from ../.env}
+    networks: [meet.jitsi]
+
+  bot-publisher:
+    build: ./bots
+    image: e2ee-bot
+    depends_on: [web, asr]
+    environment:
+      ROLE: publisher
+      ROOM: e2eeroom
+      EKEY: *ekey
+      PHRASE: *phrase
+    networks: [meet.jitsi]
+
+  bot-listener:
+    image: e2ee-bot
+    depends_on: [web, asr, bot-publisher]
+    environment:
+      ROLE: listener
+      ROOM: e2eeroom
+      EKEY: *ekey
+    networks: [meet.jitsi]
+
+  bot-eavesdropper:
+    image: e2ee-bot
+    depends_on: [web, asr, bot-publisher]
+    environment:
+      ROLE: eavesdropper
+      ROOM: e2eeroom
+      EKEY: ""
+    networks: [meet.jitsi]
+
+  test-runner:
+    build: ./test-runner
+    image: e2ee-test-runner
+    depends_on: [bot-publisher, bot-listener, bot-eavesdropper, asr]
+    environment:
+      PHRASE: *phrase
+      MEET_SECONDS: "60"
+    networks: [meet.jitsi]
+
+networks:
+  meet.jitsi:

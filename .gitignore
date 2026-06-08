@@ -1,11 +1,8 @@
+.venv
 .venv/
 __pycache__/
 *.pyc
-notes.json
 .env
 .env.*
-service-account.json
 *.json
-refs/
-.claude/
-ic3_sites/
+models/
