@@ -1,0 +1,65 @@
+{
+  "file": "14-board-bad-quarter.txt",
+  "entities": [
+    {
+      "category": "PERSON",
+      "text": "Dana"
+    },
+    {
+      "category": "PERSON",
+      "text": "Russ"
+    },
+    {
+      "category": "ORGANIZATION",
+      "text": "Brightline Foods"
+    },
+    {
+      "category": "ORGANIZATION",
+      "text": "Meridian Freight"
+    },
+    {
+      "category": "MONEY",
+      "text": "four point one million"
+    },
+    {
+      "category": "MONEY",
+      "text": "$4.1M"
+    },
+    {
+      "category": "MONEY",
+      "text": "nine hundred thousand a month"
+    },
+    {
+      "category": "MONEY",
+      "text": "$900K"
+    },
+    {
+      "category": "MONEY",
+      "text": "two hundred grand"
+    },
+    {
+      "category": "MONEY",
+      "text": "$200K ARR"
+    },
+    {
+      "category": "MONEY",
+      "text": "Ninety million"
+    },
+    {
+      "category": "DATE",
+      "text": "February"
+    },
+    {
+      "category": "DATE",
+      "text": "August"
+    },
+    {
+      "category": "DATE",
+      "text": "May"
+    },
+    {
+      "category": "PERCENT",
+      "text": "fifteen percent"
+    }
+  ]
+}

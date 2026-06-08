@@ -1,0 +1,16 @@
+{
+  "file": "03-eap-intake.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Elena"},
+    {"category": "PERSON", "text": "Joan"},
+    {"category": "DOB", "text": "March twelfth, nineteen ninety-one"},
+    {"category": "SUBSTANCE", "text": "alcohol"},
+    {"category": "PERSON", "text": "Daniel"},
+    {"category": "MEDICATION", "text": "sertraline"},
+    {"category": "DOSAGE", "text": "a hundred milligrams"},
+    {"category": "SCREENING_SCORE", "text": "fourteen"},
+    {"category": "ADDRESS", "text": "92 Linden Court, apartment 4B"},
+    {"category": "ORG", "text": "BlueShield"},
+    {"category": "MEMBER_ID", "text": "R-7-7-2-0-1-5-5-8"}
+  ]
+}

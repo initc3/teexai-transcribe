@@ -1,0 +1,24 @@
+NADIA: Greg, thanks for making time. Before I say anything, can we keep this between us? I'm honestly scared about where it goes.
+GREG: Of course. This is a safe conversation. Tell me what's going on.
+NADIA: I think Daniel Okafor, our VP of Procurement, has been padding vendor invoices. And I don't know who else is in on it.
+GREG: That's a serious thing to say. Walk me through what you actually saw.
+NADIA: In the Coupa system, there's a vendor, Brightline Logistics. PO number 48-117729. The original quote was eighty-four thousand, and the paid invoice came in at one hundred thirty-one thousand.
+GREG: A forty-seven-thousand-dollar gap on one PO.
+NADIA: It's not one. I found at least four like it since January, all routed under Daniel's approval, all to Brightline.
+GREG: How did you come across this?
+NADIA: I was reconciling Q1 in NetSuite and the numbers didn't tie out. Then I saw he'd DM'd the AP clerk, @marcus.lee, asking her to push them through before close.
+GREG: Okay. And you have the screenshots?
+NADIA: I do. I exported the approval log too, his name's on every one of them.
+GREG: Don't delete anything. Keep it exactly as is.
+NADIA: I haven't touched it. I've barely slept, Greg.
+NADIA: There's also the thing from March. The Halvorsen Dental account, their patient records were exposed for almost a week, and I think Daniel knew and sat on it.
+GREG: The data incident in March. That was never reported up?
+NADIA: No. It got quietly patched. I only know because I saw the thread on March eleventh.
+GREG: Nadia, I want to be careful here, for you and for the company.
+NADIA: Please, please keep my name out of this. If Daniel finds out it came from me, I'm done. Don't put me in anything until Legal is officially involved.
+GREG: I hear you. Here's what I can promise: I will not name you.
+GREG: I'm going to open a compliance case and notify Legal today. They'll decide on next steps, including preserving the records.
+NADIA: And nothing about Daniel goes wider until it's actually looked into? It could be nothing. I just can't unsee it.
+GREG: Correct. We treat this as unproven until Legal reviews. Send me the screenshots to greg.santos@northbay-corp.com and then sit tight.
+NADIA: Okay. Thank you. I almost didn't come in.
+GREG: You did the right thing. Let me take it from here.

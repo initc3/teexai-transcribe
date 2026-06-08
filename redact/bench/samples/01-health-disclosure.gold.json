@@ -1,0 +1,17 @@
+{
+  "file": "01-health-disclosure.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Ravi"},
+    {"category": "MEDICAL_CONDITION", "text": "syphilis"},
+    {"category": "CLINIC", "text": "Eastside Sexual Health Center"},
+    {"category": "ADDRESS", "text": "Marshall Avenue"},
+    {"category": "MEDICATION", "text": "doxycycline"},
+    {"category": "DOSAGE", "text": "two hundred milligrams"},
+    {"category": "PERSON", "text": "Allison Pham"},
+    {"category": "DATE", "text": "June nineteenth"},
+    {"category": "DATE", "text": "the twenty-sixth"},
+    {"category": "ORG", "text": "Aetna"},
+    {"category": "MEMBER_ID", "text": "four four one, six oh two, eight eight nine three"},
+    {"category": "PERSON", "text": "Marcus"}
+  ]
+}

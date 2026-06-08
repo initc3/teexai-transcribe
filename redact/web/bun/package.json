@@ -1,0 +1,9 @@
+{
+  "name": "redactbench",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "smithers-orchestrator": "^0.22.0",
+    "zod": "^4.4.3"
+  }
+}

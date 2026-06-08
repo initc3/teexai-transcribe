@@ -1,0 +1,21 @@
+{
+  "file": "07-competing-offer.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Jordan"},
+    {"category": "PERSON", "text": "Paula"},
+    {"category": "PERSON", "text": "Devon Castellano"},
+    {"category": "PERSON", "text": "Marcus Trent"},
+    {"category": "PERSON", "text": "Raymond"},
+    {"category": "ORG", "text": "Nimbus Logistics"},
+    {"category": "ORG", "text": "Brightpath Search"},
+    {"category": "MONEY", "text": "two hundred and ten base"},
+    {"category": "MONEY", "text": "sixty thousand in equity"},
+    {"category": "MONEY", "text": "thirty thousand sign-on"},
+    {"category": "MONEY", "text": "one sixty-five"},
+    {"category": "MONEY", "text": "forty-five thousand"},
+    {"category": "MONEY", "text": "one ninety-two"},
+    {"category": "DATE", "text": "June nineteenth"},
+    {"category": "DATE", "text": "June sixteenth"},
+    {"category": "PHONE", "text": "415-555-0182"}
+  ]
+}

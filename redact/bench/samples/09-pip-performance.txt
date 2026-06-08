@@ -1,0 +1,23 @@
+PRIYA: Thanks for coming in, Daniel. Shut the door. I wanted to walk you through something before it goes anywhere official.
+DANIEL: Okay. You sounded serious on the invite.
+PRIYA: I put together a draft performance improvement plan. I want to be straight with you -- I haven't run it past HR yet, this isn't official, but I owe you a heads up.
+DANIEL: A PIP. So that's where we are.
+PRIYA: It's a draft. The concerns are real, though. You missed the Q2 launch, and then there was the checkout outage -- the bug that took down checkout for the better part of a morning.
+DANIEL: I know. I know.
+PRIYA: And you've come in two sprints late on the last two cycles. Honestly, your numbers have been slipping, and this is the third time we've sat down about velocity.
+DANIEL: Can I tell you what's actually going on? And I need this to stay between us. Please keep this between us.
+PRIYA: Of course. Off the record.
+DANIEL: I have multiple sclerosis. Relapsing-remitting MS. I've been managing it for years, but I'm in a flare-up right now, and it has been wrecking my focus -- the numbness and the brain fog, it's brutal.
+PRIYA: Daniel, I'm so sorry. I had no idea.
+DANIEL: My neurologist, Dr. Okafor, just put me back on an infusion -- Tysabri -- so I'm in and out for appointments. The flare is why I've been off. My doctor says I need to dial back for a bit.
+PRIYA: That changes how I'm thinking about all of this. We can build in an accommodation, reduce your load for medical reasons --
+DANIEL: No. That's exactly what I'm asking you not to do. Please don't put me on paper for this. Don't tell the team I'm on a plan, and do not write down anything about my health. No health reasons in the notes, nothing.
+PRIYA: Understood. I won't put the diagnosis anywhere, and the formal write-up stays in my drawer until we talk again.
+DANIEL: Thank you. I just don't want a thirty-day formal write-up following me around, and I really don't want HR pulling my health into it.
+PRIYA: Then let's keep this practical. The cleanest move is to take the Atlas migration off your plate. I'll hand the Atlas migration to Sofia.
+DANIEL: That's fair. I'll document the Atlas migration steps -- the runbook, the cutover order -- before I hand it to Sofia so she's not flying blind.
+PRIYA: Perfect. And I'll lighten the rest of your load too -- let's say you reduce your project load for the next month.
+DANIEL: A month. Okay. That actually takes the pressure off.
+PRIYA: And you and I do a check-in on the 30th to review where things stand. Just the two of us, calendar invite, nothing dramatic.
+DANIEL: The 30th works. Thank you for not making this a whole thing.
+PRIYA: Get the Atlas runbook to Sofia, take the month, and we talk on the 30th. The rest stays between us.

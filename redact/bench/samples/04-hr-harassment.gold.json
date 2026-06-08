@@ -1,0 +1,16 @@
+{
+  "file": "04-hr-harassment.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Sam"},
+    {"category": "PERSON", "text": "Tom"},
+    {"category": "PERSON", "text": "Gregory Halversen"},
+    {"category": "DATE", "text": "May fifteenth through seventeenth"},
+    {"category": "ORG", "text": "Harborview Hotel"},
+    {"category": "LOCATION", "text": "Tacoma"},
+    {"category": "DATE", "text": "the sixteenth"},
+    {"category": "ROOM", "text": "room 612"},
+    {"category": "PHONE", "text": "two five three, five five five, oh one nine four"},
+    {"category": "HANDLE", "text": "greg dot h"},
+    {"category": "HANDLE", "text": "sam underscore r"}
+  ]
+}

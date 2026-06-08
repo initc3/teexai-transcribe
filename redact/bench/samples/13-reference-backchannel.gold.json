@@ -1,0 +1,45 @@
+{
+  "file": "13-reference-backchannel.txt",
+  "entities": [
+    {
+      "category": "person",
+      "text": "Priya Nandakumar"
+    },
+    {
+      "category": "person",
+      "text": "Talia"
+    },
+    {
+      "category": "person",
+      "text": "Russ"
+    },
+    {
+      "category": "person",
+      "text": "Hollis Brandt"
+    },
+    {
+      "category": "person",
+      "text": "Dana"
+    },
+    {
+      "category": "organization",
+      "text": "Calloway Partners"
+    },
+    {
+      "category": "phone",
+      "text": "312-555-0147"
+    },
+    {
+      "category": "location",
+      "text": "Oak Park"
+    },
+    {
+      "category": "money",
+      "text": "forty thousand"
+    },
+    {
+      "category": "date",
+      "text": "March"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+services:
+  app:
+    image: ghcr.io/amiller/redactbench@sha256:780d22e6cb08b921e62a929396d63cb1511e2fd0783e0c2e19bf88895972438f
+    ports:
+      - "8000:8000"
+    environment:
+      - ZAI_API_KEY=${ZAI_API_KEY}
+    restart: unless-stopped

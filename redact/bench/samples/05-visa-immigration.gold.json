@@ -1,0 +1,18 @@
+{
+  "file": "05-visa-immigration.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Anjali"},
+    {"category": "PERSON", "text": "Derek"},
+    {"category": "PERSON", "text": "Priya Vasquez"},
+    {"category": "PERSON", "text": "Rohan"},
+    {"category": "ORG", "text": "Hartwell and Cho"},
+    {"category": "ORG", "text": "Meridian Logistics"},
+    {"category": "ORG", "text": "USCIS"},
+    {"category": "CASE_ID", "text": "A zero eight, four four one, seven nine three"},
+    {"category": "CASE_ID", "text": "E A C two four, one two three, four five six seven eight"},
+    {"category": "MONEY", "text": "ninety-eight thousand"},
+    {"category": "DATE", "text": "August fourteenth"},
+    {"category": "DATE", "text": "the week of June twenty-third"},
+    {"category": "ADDRESS", "text": "200 Boardman Place"}
+  ]
+}

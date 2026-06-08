@@ -1,0 +1,15 @@
+{
+  "file": "02-layoff-financial.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Marcus"},
+    {"category": "PERSON", "text": "Priya"},
+    {"category": "PERSON", "text": "Teresa"},
+    {"category": "DATE", "text": "June thirtieth"},
+    {"category": "MONEY", "text": "one hundred forty-two thousand"},
+    {"category": "MONEY", "text": "three thousand one hundred a month"},
+    {"category": "ADDRESS", "text": "418 Crestline Drive"},
+    {"category": "ORG", "text": "First Cascade"},
+    {"category": "ACCOUNT", "text": "two two seven one"},
+    {"category": "MONEY", "text": "four hundred a week"}
+  ]
+}

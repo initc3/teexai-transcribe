@@ -1,0 +1,24 @@
+MARCUS: Okay Devin, walk me through it. How'd they get into the analytics pipeline?
+DEVIN: Long-lived AWS access key. It was hardcoded in a config file and pushed straight to the repo.
+MARCUS: Which file?
+DEVIN: analytics-pipeline.env. The key was committed in plaintext, sitting in git history for months.
+MARCUS: Give me the actual key id so I can match it against CloudTrail.
+DEVIN: Access key id is AKIA4NJK2LMNQ7XZ8PQR, and the secret is wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY.
+MARCUS: Got it. Do not put the actual key anywhere, not even the internal writeup. That value re-arms the whole thing if it leaks again.
+DEVIN: Understood, key value stays out of every doc.
+MARCUS: What did they touch once they were in?
+DEVIN: From the logs, the attacker may have read the Halvorsen Dental staging tables for about six days before we caught it.
+MARCUS: Six days. Is that exfil confirmed?
+DEVIN: No. They had read access to the staging tables but we can't confirm anything actually left. Forensics isn't done.
+MARCUS: Then we don't say Halvorsen by name anywhere public. Unconfirmed customer exposure in a public channel reads as a confirmed breach, and it isn't.
+DEVIN: Agreed.
+MARCUS: Between us, this smells like Priya's commit. She hardcoded it back in after we'd cleaned that env file last quarter. Smells like her.
+DEVIN: Maybe. But we haven't run git-blame against the final commit yet.
+MARCUS: Right, keep her name off the channel until git-blame and the access logs actually confirm it. No blame until it's proven. Priya stays off the incident channel for now.
+DEVIN: So what goes in the action items?
+MARCUS: Rotate that key and revoke every long-lived key by end of day Friday, I want it in the action items. Put it in the action items as the top priority.
+DEVIN: The key's already rotated as of an hour ago. I'll add the revoke-all-long-lived-keys task with the Friday deadline.
+MARCUS: Good. Also add: audit the repo for any other hardcoded secrets. Full sweep.
+DEVIN: On it. And the forensic timeline?
+MARCUS: Note that a full forensic timeline is in progress and findings will follow. For the public note: an internal analytics pipeline incident was detected and is contained, the compromised credential is rotated, no names, no cause.
+DEVIN: Clean. I'll draft both versions.

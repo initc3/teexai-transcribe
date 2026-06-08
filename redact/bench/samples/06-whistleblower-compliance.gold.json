@@ -1,0 +1,22 @@
+{
+  "file": "06-whistleblower-compliance.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Nadia"},
+    {"category": "PERSON", "text": "Greg"},
+    {"category": "PERSON", "text": "Daniel Okafor"},
+    {"category": "ORG", "text": "Brightline Logistics"},
+    {"category": "ORG", "text": "Halvorsen Dental"},
+    {"category": "SYSTEM", "text": "Coupa"},
+    {"category": "SYSTEM", "text": "NetSuite"},
+    {"category": "ACCOUNT", "text": "PO number 48-117729"},
+    {"category": "MONEY", "text": "eighty-four thousand"},
+    {"category": "MONEY", "text": "one hundred thirty-one thousand"},
+    {"category": "MONEY", "text": "forty-seven-thousand-dollar"},
+    {"category": "DATE", "text": "January"},
+    {"category": "DATE", "text": "March"},
+    {"category": "DATE", "text": "March eleventh"},
+    {"category": "HANDLE", "text": "@marcus.lee"},
+    {"category": "EMAIL", "text": "greg.santos@northbay-corp.com"},
+    {"category": "ORG", "text": "northbay-corp"}
+  ]
+}

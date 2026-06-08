@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cue vs Smithers — two ways to organize AI work</title>
+<style>
+  :root{
+    --bg:#fbfcfd; --panel:#f1f4f7; --code:#eef1f5; --ink:#1a2027; --dim:#5a6573; --line:#d6dde4;
+    --cue:#0e8d84; --cue-dim:#9bd8d2; --smith:#b9690d; --smith-dim:#eccb9c;
+    --accent:#7c3aed;
+    --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans)}
+  #deck{height:100vh;width:100vw;overflow:hidden;position:relative}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
+    padding:5vh 8vw;animation:fade .35s ease}
+  .slide.active{display:flex}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  h1{font-size:clamp(28px,5vw,60px);line-height:1.05;margin:0 0 .3em}
+  h2{font-size:clamp(22px,3.4vw,40px);margin:0 0 .55em;letter-spacing:-.5px}
+  h3{font-size:clamp(15px,1.7vw,22px);margin:.2em 0;color:var(--dim);font-weight:600}
+  p,li{font-size:clamp(14px,1.55vw,20px);line-height:1.5}
+  ul{margin:.3em 0;padding-left:1.1em}
+  li{margin:.32em 0}
+  .eyebrow{font-family:var(--mono);font-size:13px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-bottom:1.2em}
+  .cue{color:var(--cue)} .smith{color:var(--smith)} .accent{color:var(--accent)} .dim{color:var(--dim)}
+  b.cue,b.smith{font-weight:700}
+  pre{font-family:var(--mono);background:var(--code);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;font-size:clamp(11px,1.15vw,15px);line-height:1.45;overflow:auto;color:#243038;margin:.5em 0}
+  pre .k{color:var(--accent)} pre .s{color:var(--cue)} pre .c{color:var(--dim)} pre .o{color:var(--smith)}
+  code{font-family:var(--mono);background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:.92em}
+  .cols{display:flex;gap:3vw;align-items:flex-start}
+  .col{flex:1;min-width:0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .card.cueC{border-color:var(--cue-dim)} .card.smithC{border-color:var(--smith-dim)}
+  .card h3{color:var(--ink)}
+  table{border-collapse:collapse;width:100%;font-size:clamp(12px,1.35vw,18px)}
+  td,th{border-bottom:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-family:var(--mono);font-size:.8em;letter-spacing:1px;text-transform:uppercase}
+  .tag{display:inline-block;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--dim);margin-right:6px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .ex{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .ex .nm{font-family:var(--mono);color:var(--cue);font-size:.95em}
+  .ex .cue-tool{font-family:var(--mono);font-size:.8em;color:var(--dim);margin-top:6px}
+  .big{font-size:clamp(20px,2.6vw,34px);line-height:1.3}
+  .lead{color:var(--dim);max-width:60ch}
+  footer{position:fixed;bottom:14px;left:0;right:0;display:flex;justify-content:space-between;
+    align-items:center;padding:0 24px;font-family:var(--mono);font-size:12px;color:var(--dim);pointer-events:none}
+  .dots{display:flex;gap:6px;pointer-events:auto}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--line);cursor:pointer;border:none;padding:0}
+  .dot.on{background:var(--accent)}
+  .navhint{opacity:.7}
+  .center{align-items:center;text-align:center}
+  .pill{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:20px;padding:3px 12px;color:var(--dim)}
+  .flow{font-family:var(--mono);font-size:clamp(11px,1.2vw,16px);color:#243038;line-height:1.7}
+  .muted{color:var(--dim);font-size:.92em}
+  @media print{
+    html,body{height:auto} #deck{height:auto;overflow:visible}
+    .slide{display:flex!important;position:relative;inset:auto;height:100vh;page-break-after:always;animation:none}
+    footer{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="deck">
+
+  <!-- 1 -->
+  <section class="slide active center">
+    <div class="eyebrow">orchestration runtimes</div>
+    <h1><span class="cue">Cue</span> <span class="dim">vs</span> <span class="smith">Smithers</span></h1>
+    <p class="lead">Two runtimes for composing LLM calls.
+    <span class="cue">Cue</span> is an event loop over an observation stream;
+    <span class="smith">Smithers</span> is a task DAG executed to completion.</p>
+    <p class="muted">jameslbarnes/cue &nbsp;·&nbsp; smithers-orchestrator &nbsp;·&nbsp; with the shipped examples</p>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <h2>Two execution models</h2>
+    <div class="cols">
+      <div class="col card cueC">
+        <h3 class="cue">Cue — event-driven</h3>
+        <p>A persistent loop over an <b class="cue">Observation stream</b>. Cue policies decide which
+        observations wake a model; the model emits an action or passes. State persists across the session.</p>
+      </div>
+      <div class="col card smithC">
+        <h3 class="smith">Smithers — graph</h3>
+        <p>A declarative <b class="smith">DAG of Tasks</b> (Parallel / Loop). Runs start → finish; each task
+        is one model call with a typed output. Durable and resumable.</p>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:1.4em">Control flow in <span class="cue">Cue</span> is determined at runtime by
+    incoming events; in <span class="smith">Smithers</span> it is fixed by the graph you write.</p>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="eyebrow">Part 1 · Cue</div>
+    <h2><span class="cue">Cue</span> is one loop</h2>
+    <pre class="flow">
+ observation stream ─▶ cue policies decide "wake?" ─▶ woken program shows the model
+                                                      rolling state + eligible tools
+                                               ─▶ model emits a <span class="o">tool call</span> OR <span class="s">observe.pass</span>
+                                               ─▶ decision recorded (DecisionHistory / memory)
+    </pre>
+    <ul>
+      <li>No turns. Everything — a transcript line, a video frame, an audio reading, a clock <code>tick</code> — is an <b class="cue">Observation</b> on one stream.</li>
+      <li><code>harness.ingest(obs)</code> is the only entry point. Every cue runs; the ones that fire wake matching programs.</li>
+      <li><span class="s">observe.pass</span> is first-class — most events are non-events. The value is <b>catching the important moment while avoiding dumb wake-ups.</b></li>
+    </ul>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <h2>Cue primitives</h2>
+    <table>
+      <tr><th>primitive</th><th>what it is</th></tr>
+      <tr><td class="cue">Observation</td><td>timestamped input: <code>transcript.segment</code>, <code>vision.frame</code>, <code>signal.value</code>, <code>tick</code></td></tr>
+      <tr><td class="cue">Cue policy</td><td>a "wake?" detector: <code>maybeCue(obs, state) → Heartbeat | undefined</code>. Many run concurrently, at different timescales.</td></tr>
+      <tr><td class="cue">Program + trigger</td><td>the model (e.g. GLM-flash) that runs on selected cues (<code>Triggers.onCue("text")</code>)</td></tr>
+      <tr><td class="cue">Tool / observe.pass</td><td>the structured action it emits — or the first-class "do nothing"</td></tr>
+      <tr><td class="cue">DecisionHistory / WeightedMemory</td><td>prior calls + recency-weighted facts, surfaced to the next wake-up → an <b>accumulating, stateful</b> agent</td></tr>
+    </table>
+    <p class="lead" style="margin-top:1em">A cue is just an object with one method — <b>fully customizable</b>: tune params, or write your own in ~15 lines.</p>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <h2>The cue zoo = clocks at different timescales</h2>
+    <p class="lead">Multiple cues run at once. Each catches a different kind of moment — a fast keyword lane and a slow summary lane live in the <i>same</i> harness.</p>
+    <table>
+      <tr><th>cue</th><th>fires when</th><th>timescale</th></tr>
+      <tr><td class="cue">TextCue / KeywordCue</td><td>a target phrase appears ("but", "between us")</td><td>instant</td></tr>
+      <tr><td class="cue">PunctuationCue</td><td>a sentence ends</td><td>per-utterance</td></tr>
+      <tr><td class="cue">SilenceCue</td><td>quiet for N seconds (needs <code>tick</code>s)</td><td>pause</td></tr>
+      <tr><td class="cue">SignalThresholdCue</td><td>a numeric signal crosses (audio energy, a probe)</td><td>continuous</td></tr>
+      <tr><td class="cue">WordCountCue / IntervalCue</td><td>every N words / N seconds</td><td>slow cadence</td></tr>
+      <tr><td class="cue">SpeakerChangedCue</td><td>turn changes / third party joins</td><td>event</td></tr>
+    </table>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <h2>How audio / text / frames map in</h2>
+    <h3>Two streams — the harness only ever sees the second</h3>
+    <pre class="flow">
+ raw input            <span class="dim">PROVIDER (adapter)</span>        observation stream      CUES → model
+ ─────────            ──────────────────        ──────────────────      ───────────
+ audio bytes ───────▶ TranscriptionProvider ─▶ <span class="s">transcript.segment</span> ────▶ ingest()
+ video frames ──────▶ VLMProvider ──────────▶ <span class="s">vision.description</span>
+ prosody / probes ──▶ signal source ────────▶ <span class="s">signal.value</span>
+ already-have text ─▶ <span class="dim">(none)</span> ───────────────▶ transcriptObservation(text)
+    </pre>
+    <ul>
+      <li>The harness has <b>no idea</b> what audio or tokens are — a <b class="cue">provider</b> normalizes every modality to one <code>Observation</code> shape.</li>
+      <li>Providers emit interim hypotheses (<code>isFinal:false</code>) and settled text (<code>isFinal:true</code>); cues like Punctuation ignore interims → you control granularity.</li>
+      <li>Cues tick <b>on observations, not wall-clock</b> — feed <code>tick_observation()</code> as the clock so silence/interval cues fire when the room is quiet.</li>
+    </ul>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <h2>The shipped examples = one cue → one tool</h2>
+    <p class="lead">Each example is the same harness with a different <span class="cue">cue</span> and a single action tool. The cue choice <i>is</i> the design.</p>
+    <div class="grid">
+      <div class="ex"><span class="nm">but-coach</span><div class="cue-tool">TextCue(["but"]) → coach.interrupt_for_but <span class="dim">(cooldown 4s)</span></div><p class="muted">Speech coaching: wake only on the word "but", propose a "yes-and" rewrite.</p></div>
+      <div class="ex"><span class="nm">meeting-red-alert</span><div class="cue-tool">PunctuationCue() → claim_alert <span class="dim">(cooldown 60s)</span></div><p class="muted">Interrupt a live meeting on a risky claim; rare, sentence-gated.</p></div>
+      <div class="ex"><span class="nm">conversation-shader</span><div class="cue-tool">SignalThresholdCue("audio.energy",0.45) → set_affect</div><p class="muted">Drive a visual from prosody — woken by energy, not words.</p></div>
+      <div class="ex"><span class="nm">live-dashboard</span><div class="cue-tool">WordCountCue(20) + IntervalCue(10) → room_brief</div><p class="muted">A rolling summary revised on a slow cadence — the evolving-notes pattern.</p></div>
+      <div class="ex"><span class="nm">voxterm-live</span><div class="cue-tool">ManualCue() → action <span class="dim">(fires per transcript line)</span></div><p class="muted">Watch a VoxTerm transcript file; decide on each new line.</p></div>
+      <div class="ex"><span class="nm">etherea</span> <span class="pill">flagship</span><div class="cue-tool">IdleCue (defaults pass) + transcript cues → set_prompt</div><p class="muted">Live AI video: the model edits its own prior <code>set_prompt</code> across wakes.</p></div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <h2>but-coach, in full</h2>
+    <pre>
+<span class="k">new</span> CueHarness({
+  cues: [<span class="k">new</span> <span class="s">TextCue</span>([<span class="s">"but"</span>])],            <span class="c">// wake only on "but"</span>
+  programs: [{
+    name: <span class="s">"but-coach"</span>,
+    llmProvider: <span class="k">new</span> CerebrasLLMProvider({ <span class="c">/* system + buildUserPrompt */</span> }),
+    allowedTools: [<span class="s">"coach.interrupt_for_but"</span>],
+    triggers: [Triggers.<span class="o">onCue</span>(<span class="s">"text"</span>)],          <span class="c">// run this program when the text cue fires</span>
+  }],
+  tools: [butFeedbackTool()],                  <span class="c">// schema forces {quote, feedback, alternative, severity}</span>
+})
+    </pre>
+    <p class="lead">Everything else passes. The <code>alternative</code> field forces a yes-and reframe of the sentence. Restraint is the whole point — and the <i>thing Cue is for.</i></p>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <h2>Cue's scarce resource: <span class="cue">model calls</span></h2>
+    <p class="lead">State is bounded by design (fixed-size deques). The one thing you ration is LLM invocations — every wake is one call (cost, latency, rate limits).</p>
+    <table>
+      <tr><th>lever</th><th>mechanism</th></tr>
+      <tr><td>cue selectivity</td><td><code>WordCountCue(24)</code>/<code>IntervalCue(12)</code> ≪ per-segment — the primary throttle</td></tr>
+      <tr><td>cooldowns</td><td>cue + tool <code>cooldownSeconds</code> suppress re-fires</td></tr>
+      <tr><td>observe.pass</td><td>a wake needn't produce an action</td></tr>
+      <tr><td>coalesce</td><td>multi-cue on one obs → one call, not N</td></tr>
+      <tr><td>window / max tokens</td><td><code>transcriptWindowChars</code>, <code>maxCompletionTokens</code> bound per-call cost</td></tr>
+    </table>
+    <p class="muted" style="margin-top:.8em">We measured this: waking on every segment → ~8s/call and 429s. The fix is exactly cue selectivity + cooldown.</p>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <div class="eyebrow">Part 2 · Smithers</div>
+    <h2><span class="smith">Smithers</span> is a declarative DAG</h2>
+    <pre>
+<span class="k">const</span> { Workflow, Task, smithers, outputs } = createSmithers({
+  notes: notesSchema, judgment: judgeSchema,        <span class="c">// typed outputs (zod)</span>
+});
+
+<span class="k">export default</span> smithers((ctx) => (
+  <span class="o">&lt;Workflow</span> name=<span class="s">"redactbench"</span><span class="o">&gt;</span>
+    <span class="o">&lt;Parallel</span> maxConcurrency={2}<span class="o">&gt;</span>            <span class="c">// stage 1: generate notes 2 ways</span>
+      {variants.map(([v,ag]) =&gt; <span class="o">&lt;Task</span> id={<span class="s">`gen:${v}`</span>} output={outputs.notes} agent={ag}&gt;…<span class="o">&lt;/Task&gt;</span>)}
+    <span class="o">&lt;/Parallel&gt;</span>
+    <span class="o">&lt;Parallel</span> maxConcurrency={8}<span class="o">&gt;</span>            <span class="c">// stage 2: judge each strike + each must-keep</span>
+      {leak &amp; keep tasks, reading notes via ctx.outputMaybe(...)}
+    <span class="o">&lt;/Parallel&gt;</span>
+  <span class="o">&lt;/Workflow&gt;</span>
+));
+    </pre>
+    <p class="lead">You <b>write the graph</b>. The runtime executes it — durable, resumable, cached — and collects typed results into tables.</p>
+  </section>
+
+  <!-- 11 -->
+  <section class="slide">
+    <h2>Smithers properties</h2>
+    <div class="cols">
+      <div class="col">
+        <ul>
+          <li><b class="smith">Explicit structure</b> — <code>&lt;Parallel&gt;</code>, <code>&lt;Loop&gt;</code>, <code>&lt;Task&gt;</code>. The control flow is on the page.</li>
+          <li><b class="smith">Durable + resumable</b> — every node/attempt persisted to <code>smithers.db</code>; a crash mid-run resumes.</li>
+          <li><b class="smith">Typed outputs</b> — tasks return zod-validated objects, threaded by <code>ctx.outputMaybe(out,{nodeId})</code>.</li>
+          <li><b class="smith">Bounded</b> — it starts, fans out, terminates with a result set.</li>
+        </ul>
+      </div>
+      <div class="col card smithC">
+        <h3 class="smith">PC committee workflow</h3>
+        <pre style="margin:0"><span class="o">&lt;Parallel&gt;</span> 11 independent reviews <span class="o">&lt;/Parallel&gt;</span>
+<span class="o">&lt;Loop</span> until={converged}<span class="o">&gt;</span>          <span class="c">// reviewers revise</span>
+   discussion rounds              <span class="c">// seeing each other</span>
+<span class="o">&lt;/Loop&gt;</span>
+<span class="o">&lt;Task&gt;</span> area-chair meta-review <span class="o">&lt;/Task&gt;</span></pre>
+        <p class="muted">Fan-out → converge → synthesize. The shape you'd never want to hand-drive.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section class="slide">
+    <h2>Side by side</h2>
+    <table>
+      <tr><th></th><th class="cue">Cue</th><th class="smith">Smithers</th></tr>
+      <tr><td>organizing axis</td><td>a stream over <b>time</b></td><td>a <b>DAG</b> of tasks</td></tr>
+      <tr><td>control flow</td><td>implicit — cues fire</td><td>explicit — you write it</td></tr>
+      <tr><td>lifetime</td><td>long-lived, open-ended</td><td>bounded, terminates</td></tr>
+      <tr><td>state</td><td>one rolling ConversationState</td><td>per-task typed outputs</td></tr>
+      <tr><td>schedule</td><td>non-deterministic (reactive)</td><td>deterministic, durable, resumable</td></tr>
+      <tr><td>default</td><td><span class="s">observe.pass</span> (do nothing)</td><td>every task runs</td></tr>
+      <tr><td>scarce resource</td><td>model calls (rationed by cues)</td><td>wall-clock / concurrency</td></tr>
+      <tr><td>best for</td><td>realtime, restraint, "<b>when</b>"</td><td>fan-out, ensembles, "<b>do all reliably</b>"</td></tr>
+    </table>
+  </section>
+
+  <!-- 13 -->
+  <section class="slide center">
+    <h2>Reactive loop &nbsp;<span class="dim">vs</span>&nbsp; orchestrated graph</h2>
+    <div class="cols" style="width:100%;margin-top:1em">
+      <div class="col"><pre class="flow" style="text-align:left">
+  <span class="cue">CUE</span>  (one agent, over time)
+
+   ··obs··obs··obs··obs··obs··▶ t
+        │         │
+      <span class="s">pass</span>      <span class="o">act</span>
+        ╰─ state accumulates ─╯
+      </pre><p class="muted">one stateful loop reacting forever</p></div>
+      <div class="col"><pre class="flow" style="text-align:left">
+  <span class="smith">SMITHERS</span> (many agents, a plan)
+
+        ┌─▶ gen:v ─┬─▶ leak×n
+   start┤          ├─▶ keep×n ─▶ done
+        └─▶ gen:a ─┴─▶ …
+      </pre><p class="muted">a finite fan-out, run to completion</p></div>
+    </div>
+    <p class="lead" style="margin-top:1.2em">Cue is a <b class="cue">verb in the present tense</b>; Smithers is a <b class="smith">recipe you execute</b>.</p>
+  </section>
+
+  <!-- 14 -->
+  <section class="slide">
+    <h2>When to reach for which</h2>
+    <div class="cols">
+      <div class="col card cueC">
+        <h3 class="cue">Reach for Cue when…</h3>
+        <ul>
+          <li>input is a live stream (audio, a meeting, a feed)</li>
+          <li>the question is <b>"should anything happen right now?"</b></li>
+          <li>restraint matters — silence is the common, correct output</li>
+          <li>you need one evolving, stateful agent</li>
+        </ul>
+      </div>
+      <div class="col card smithC">
+        <h3 class="smith">Reach for Smithers when…</h3>
+        <ul>
+          <li>you have a known set of work to fan out</li>
+          <li>the question is <b>"run all of this, reliably"</b></li>
+          <li>you want ensembles, retries, resume, caching</li>
+          <li>the result is a collected, scored artifact</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15 -->
+  <section class="slide">
+    <div class="eyebrow">Synthesis · our redaction pipeline</div>
+    <h2>They <span class="accent">compose</span></h2>
+    <pre class="flow">
+ audio ─▶ <span class="cue">CUE</span> (realtime) ─────────────▶ strike contract ─▶ <span class="smith">SMITHERS</span> (offline) ─▶ scorecard
+          catch the squiggle live              (the seam)         score the fan-out, K runs, in-TEE
+          L1: detect / mark                                       L2–L5: classify · decide · compose · assure
+    </pre>
+    <ul>
+      <li><span class="cue">Cue</span> = the <b>reactive edge</b>: catch live "strike that" + sensitive-in-hindsight, author marks that accumulate (the emergent half of policy).</li>
+      <li><span class="smith">Smithers</span> = the <b>orchestrated core</b>: generate per-recipient notes, judge leak/keep over K runs, attest the result.</li>
+      <li>They meet at the <b class="accent">strike contract</b> — same place Cue↔RedactBench meet at the transcript→notes artifact.</li>
+    </ul>
+  </section>
+
+  <!-- 16 -->
+  <section class="slide center">
+    <h2>Takeaway</h2>
+    <p class="big lead"><span class="cue">Cue</span> organizes AI work along <b>time</b> — reactive, stateful, "decide when to act."</p>
+    <p class="big lead"><span class="smith">Smithers</span> organizes it along a <b>graph</b> — orchestrated, durable, "run this to completion."</p>
+    <p class="lead" style="margin-top:1.4em">Most real systems want <b>both</b>: a reactive edge feeding an orchestrated core.</p>
+    <p class="muted">— ic3camp-teexai · docs/cue-vs-smithers.html</p>
+  </section>
+
+</div>
+
+<footer>
+  <span class="navhint">← → / space · &nbsp;f fullscreen · &nbsp;p print→pdf</span>
+  <span class="dots" id="dots"></span>
+  <span id="counter">1 / 16</span>
+</footer>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  const dotsWrap = document.getElementById('dots');
+  const counter = document.getElementById('counter');
+  let i = 0;
+  slides.forEach((_, n) => {
+    const b = document.createElement('button');
+    b.className = 'dot' + (n === 0 ? ' on' : '');
+    b.onclick = () => go(n);
+    dotsWrap.appendChild(b);
+  });
+  const dots = [...dotsWrap.children];
+  function go(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(i + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(i - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'f') document.documentElement.requestFullscreen?.();
+    else if (e.key === 'p') window.print();
+  });
+  // click right/left half to navigate
+  document.getElementById('deck').addEventListener('click', e => {
+    if (e.target.closest('.dot')) return;
+    go(i + (e.clientX > window.innerWidth / 2 ? 1 : -1));
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "file": "11-security-incident.txt",
+  "entities": [
+    {
+      "category": "person",
+      "text": "Marcus"
+    },
+    {
+      "category": "person",
+      "text": "Devin"
+    },
+    {
+      "category": "person",
+      "text": "Priya"
+    },
+    {
+      "category": "aws_access_key_id",
+      "text": "AKIA4NJK2LMNQ7XZ8PQR"
+    },
+    {
+      "category": "aws_secret_access_key",
+      "text": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    },
+    {
+      "category": "filename",
+      "text": "analytics-pipeline.env"
+    },
+    {
+      "category": "organization",
+      "text": "Halvorsen Dental"
+    }
+  ]
+}

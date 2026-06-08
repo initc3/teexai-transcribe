@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RedactBench</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; margin: 0;
+         background: #0e1116; color: #d7dde5; }
+  header { padding: 16px 24px; border-bottom: 1px solid #222a35; }
+  h1 { margin: 0; font-size: 19px; } header small { color: #8b97a7; }
+  main { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - 58px); }
+  aside { border-right: 1px solid #222a35; overflow-y: auto; padding: 14px; }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #8b97a7; margin: 4px 0 10px; }
+  section { overflow-y: auto; padding: 18px 24px; }
+  label { display: block; font-size: 12.5px; color: #8b97a7; margin: 12px 0 4px; }
+  input, textarea { width: 100%; box-sizing: border-box; background: #0a0d12; color: #d7dde5;
+    border: 1px solid #222a35; border-radius: 8px; padding: 9px; font-size: 13px; }
+  textarea { font-family: ui-monospace, monospace; font-size: 12px; resize: vertical; }
+  button { background: #5b8cff; color: #fff; border: 0; padding: 10px 18px; border-radius: 8px;
+    font-size: 14px; cursor: pointer; margin-top: 12px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .hint { color: #8b97a7; font-size: 13px; margin-left: 10px; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .clean { background: #10331f; color: #56d98a; } .leak { background: #3a1620; color: #ff7a93; }
+  .pass { background: #10331f; color: #56d98a; } .fail { background: #2a2230; color: #c8b6e2; }
+  .totals { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 16px 0;
+    padding: 14px; border: 1px solid #2a3340; border-radius: 10px; background: #121823; }
+  .totals b { font-size: 20px; display: block; } .totals span { font-size: 12px; color: #8b97a7; }
+  .sample { border: 1px solid #222a35; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .sample h3 { margin: 0 0 4px; font-size: 14px; } .sample .aud { color: #8b97a7; font-size: 12.5px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .card { border: 1px solid #1c232d; border-radius: 8px; padding: 10px; }
+  .card h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; color: #8b97a7; letter-spacing: .04em; }
+  .chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 6px; margin: 2px 3px 0 0; }
+  .chip.kept { background: #10331f; color: #56d98a; } .chip.dropped { background: #2a2230; color: #c8b6e2; }
+  .chip.survived { background: #3a1620; color: #ff7a93; }
+  pre { white-space: pre-wrap; background: #0a0d12; border: 1px solid #1c232d; border-radius: 6px;
+    padding: 9px; font-size: 11.5px; max-height: 200px; overflow-y: auto; color: #c4ccd6; margin: 6px 0 0; }
+  .run { padding: 8px 10px; border: 1px solid #222a35; border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 13px; }
+  .run:hover { border-color: #3a4757; } .run b { display: block; }
+  .run small { color: #8b97a7; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RedactBench <small>— editorial-redaction skill harness</small></h1>
+  <small>Submit a redactor. It's scored on the dev set for <b>leakage</b> (hard gate) and <b>retention</b> (anti-over-redaction). Clean-AND-useful ranks.</small>
+</header>
+<main>
+  <aside>
+    <h2>Leaderboard</h2>
+    <div id="board"></div>
+  </aside>
+  <section>
+    <label>Submission name</label>
+    <input id="name" placeholder="e.g. discreet-notes v2 (glm-4.6)">
+    <label>Redactor skill (system prompt) — edit and resubmit to iterate</label>
+    <textarea id="skill" rows="14"></textarea>
+    <button id="run">Run on dev set (8 samples)</button>
+    <span class="hint" id="status"></span>
+    <div id="out"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<]/g, c => ({'&':'&amp;','<':'&lt;'}[c]));
+
+async function loadBoard() {
+  const runs = await (await fetch("/api/leaderboard")).json();
+  $("board").innerHTML = runs.length ? runs.map((r, i) =>
+    `<div class="run" data-id="${r.run_id}"><b>${i+1}. ${esc(r.name)}
+      <span class="badge ${r.pass?'pass':'fail'}">${r.pass?'PASS':'—'}</span></b>
+      <small>clean ${(r.clean_rate*100)|0}% · leaks ${r.total_leaks} · keep ${(r.mean_retention*100)|0}%
+        · Δleak ${r.delta_leaks}${r.split_rate!=null?` · split ${(r.split_rate*100)|0}%`:""} · ${r.provider}</small></div>`).join("")
+    : '<small class="hint">No runs yet.</small>';
+  document.querySelectorAll(".run").forEach(el => el.onclick = () =>
+    fetch("/api/run/" + el.dataset.id).then(r => r.json()).then(showCard));
+}
+
+function variant(title, v) {
+  const vt = x => x.votes ? ` <span style="opacity:.6">${x.votes}</span>` : "";
+  const strikes = v.strike_verdicts.map(s =>
+    `<span class="chip ${s.leaked?'survived':'dropped'}" title="${esc(s.reason||'')}">${s.id} ${s.leaked?'⚠ leaked':'✓ dropped'}${vt(s)}</span>`).join("");
+  const keeps = v.keep_verdicts.map(k =>
+    `<span class="chip ${k.kept?'kept':'survived'}" title="${esc(k.reason||'')}">${k.kept?'✓':'✗'} ${esc(k.keep.slice(0,40))}${vt(k)}</span>`).join("");
+  return `<div class="card"><h4>${title} <span class="badge ${v.verdict==='CLEAN'?'clean':'leak'}">${v.verdict}</span>
+    <span style="float:right;color:#8b97a7;font-size:11px">retention ${v.kept}/${v.n_keep}</span></h4>
+    <div>${strikes}</div><div style="margin-top:4px">${keeps}</div>
+    <pre>${esc(v.notes)}</pre></div>`;
+}
+
+function showCard(c) {
+  $("out").innerHTML = `<div class="totals">
+    <div><b>${c.pass?'<span class="badge pass">PASS</span>':'<span class="badge fail">no pass</span>'}</b><span>clean==100% & keep≥67%</span></div>
+    <div><b>${(c.clean_rate*100)|0}%</b><span>clean rate</span></div>
+    <div><b>${c.total_leaks}</b><span>total leaks (Δ ${c.delta_leaks})</span></div>
+    <div><b>${(c.mean_retention*100)|0}%</b><span>mean retention (Δ ${c.delta_retention>=0?'+':''}${c.delta_retention})</span></div>
+    <div><b>${(c.split_rate*100)|0}%</b><span>judge split (×${c.ensemble_n})</span></div>
+    <div><span>${c.provider}<br>skill ${c.skill_hash.slice(0,8)} · data ${c.dataset_hash.slice(0,8)}</span></div>
+  </div>` + c.per_sample.map(s =>
+    `<div class="sample"><h3>${s.id}</h3><div class="aud">audience: ${esc(s.audience)}</div>
+      <div class="cols">${variant("Vanilla (no skill)", s.vanilla)}${variant("With skill", s.augmented)}</div></div>`).join("");
+}
+
+async function run() {
+  const name = $("name").value.trim() || "unnamed";
+  $("run").disabled = true; $("status").textContent = " running 8 samples × 2 variants…"; $("out").innerHTML = "";
+  const c = await (await fetch("/api/submit", {method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({name, skill_md: $("skill").value, set: "dev"})})).json();
+  $("status").textContent = " done · " + c.provider;
+  showCard(c); loadBoard(); $("run").disabled = false;
+}
+
+(async () => {
+  $("skill").value = (await (await fetch("/api/skill")).json()).skill_md;
+  loadBoard();
+})();
+$("run").onclick = run;
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+{
+  "file": "10-cofounder-equity.txt",
+  "entities": [
+    {
+      "category": "person",
+      "text": "Devin"
+    },
+    {
+      "category": "person",
+      "text": "Priya"
+    },
+    {
+      "category": "person",
+      "text": "Hollis"
+    },
+    {
+      "category": "person",
+      "text": "Sasha"
+    },
+    {
+      "category": "person",
+      "text": "Tobias"
+    },
+    {
+      "category": "org",
+      "text": "Northwind"
+    },
+    {
+      "category": "org",
+      "text": "Halcyon"
+    },
+    {
+      "category": "money",
+      "text": "forty million"
+    },
+    {
+      "category": "money",
+      "text": "$40M"
+    },
+    {
+      "category": "money",
+      "text": "four hundred grand a point"
+    },
+    {
+      "category": "money",
+      "text": "180 thousand"
+    },
+    {
+      "category": "money",
+      "text": "$180K"
+    },
+    {
+      "category": "money",
+      "text": "pre-money 32"
+    },
+    {
+      "category": "date",
+      "text": "June 19"
+    },
+    {
+      "category": "family_member",
+      "text": "my dad"
+    }
+  ]
+}

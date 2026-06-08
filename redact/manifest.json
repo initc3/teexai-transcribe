@@ -1,0 +1,29 @@
+{
+  "manifest_version": "1.0",
+  "kind": "agent-skill+benchmark",
+  "name": "discreet-meeting-notes",
+  "version": "0.1.0",
+  "summary": "Audience-aware editorial redaction of meeting transcripts, with a bundled leak/over-redaction benchmark.",
+  "entrypoints": {
+    "skill": "skill/SKILL.md",
+    "runtime": "runtime/run.ts",
+    "benchmark": "bench/run.sh"
+  },
+  "capabilities": [
+    "per-recipient-redaction",
+    "framing-false-positive-guard",
+    "multi-pass-durable-workflow",
+    "self-scoring-benchmark"
+  ],
+  "install": {
+    "compatible_runtimes": ["claude-code", "smithers", "generic-llm"],
+    "claude-code": "adapters/claude-code/discreet-meeting-notes/SKILL.md",
+    "smithers": "runtime/redact.tsx"
+  },
+  "knowledge": ["bench/", "gen/"],
+  "provenance": {
+    "benchmark": "RedactBench (16 dev samples)",
+    "scorer": "bench/bench.py (vanilla | prompt | workflow arms)",
+    "attestation": "workflow + judge are TEE-attestable; emit a signed scorecard (skill_hash, dataset_hash, leak, retention)"
+  }
+}

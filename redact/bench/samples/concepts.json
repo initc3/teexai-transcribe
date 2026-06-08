@@ -1,0 +1,69 @@
+{
+  "_doc": "Curated concept axes for generating RedactBench dev samples. A plan = one tuple (setting, families+, mechanisms+, audience, tension) + a concrete narrative. Axes drawn from user-journey-mapping/whiteboard-to-goku.md and the existing 8 samples. See plans/ for generated plans.",
+
+  "settings": [
+    {"slug": "health-disclosure",      "dyad": "employee -> manager",        "used": "01"},
+    {"slug": "layoff-financial",       "dyad": "manager -> report",          "used": "02"},
+    {"slug": "eap-intake",             "dyad": "counselor -> client",        "used": "03"},
+    {"slug": "hr-harassment",          "dyad": "HR investigator -> reporter","used": "04"},
+    {"slug": "visa-immigration",       "dyad": "manager -> report",          "used": "05"},
+    {"slug": "whistleblower-compliance","dyad": "reporter -> compliance",    "used": "06"},
+    {"slug": "competing-offer",        "dyad": "report -> manager",          "used": "07"},
+    {"slug": "domestic-safety",        "dyad": "employee -> HR/manager",     "used": "08"},
+
+    {"slug": "pip-performance",        "dyad": "manager -> report",          "note": "performance-improvement plan; a health condition is the mitigating context the employee shares in confidence"},
+    {"slug": "cofounder-equity",       "dyad": "cofounder <-> cofounder (+advisor)", "note": "equity re-split / one cofounder underwater; a pending term sheet and a personal financial bind"},
+    {"slug": "security-incident",      "dyad": "eng lead <-> engineer",      "note": "postmortem of a breach; a leaked credential, a likely-but-unproven root cause pinned on one engineer"},
+    {"slug": "settlement-negotiation", "dyad": "employee <-> outside counsel","note": "attorney-client privileged; severance/claim strategy, a third party named in passing"},
+    {"slug": "reference-backchannel",  "dyad": "hiring manager <-> former colleague", "note": "off-the-record reference; unproven gossip about a candidate, plus benign hire logistics"},
+    {"slug": "board-bad-quarter",      "dyad": "CEO <-> CFO",                "note": "prepping the board deck; runway concern is real, but a layoff plan and acquisition talks are not decided"},
+
+    {"slug": "redaction-tool-review",  "dyad": "PM <-> engineer",            "framing": true, "note": "a meeting ABOUT building a redaction/DLP tool; dense with trigger words ('catch SSNs like 123-45-6789', a feature named 'strike that') used as spec examples -- nothing actually confidential"},
+    {"slug": "screenplay-rehearsal",   "dyad": "director + actors",          "framing": true, "note": "a read-through where people in character say sensitive lines or say 'redact'; performance, not disclosure"},
+    {"slug": "security-tabletop",      "dyad": "incident commander <-> team","framing": true, "note": "red-team tabletop using synthetic personas and placeholder credentials; fake PII as exercise data"},
+    {"slug": "onboarding-readthrough", "dyad": "trainer <-> new hire",       "framing": true, "note": "trainer reads a sample support call with dummy customer PII to teach the flow"}
+  ],
+
+  "families": {
+    "sensitive_data": ["pii", "health", "financial", "credential", "acp_privileged"],
+    "strategic": ["undecided_personnel_action", "deal_in_progress", "unproven_allegation", "competitive_secret", "legal_exposure"],
+    "noise": ["off_topic", "joke", "bystander_pickup"]
+  },
+
+  "mechanisms": [
+    "explicit_callout",
+    "off_the_record_phrase",
+    "hindsight_sensitive",
+    "reidentification_chain",
+    "bystander_thirdparty",
+    "embedded_action_instruction",
+    "premature_decision_leak"
+  ],
+
+  "audiences": [
+    "public_channel",
+    "all_team",
+    "specific_team_ops",
+    "implicated_party_readable",
+    "single_assignee_excerpt",
+    "external_counterparty",
+    "manager_only"
+  ],
+
+  "tensions": [
+    "cant_bury",
+    "names_protected_issue_shared",
+    "logistics_without_diagnosis",
+    "decision_vs_deliberation",
+    "action_without_reason"
+  ],
+
+  "_framing_doc": "Framing-trap samples are the false-positive dual of leaks: transcripts dense with trigger words that are NOT real disclosures, so a naive redactor over-redacts. Score them as retention stress-tests -- few or zero real strikes, must_keep = the substantive content (carrying the trigger words) that must survive. A high-discretion skill keeps it; a cue-matcher strips it.",
+  "framing_traps": [
+    "mention_vs_use",
+    "quoted_reported",
+    "hypothetical_synthetic",
+    "in_character_rehearsal",
+    "already_public"
+  ]
+}

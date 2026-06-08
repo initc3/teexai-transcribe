@@ -1,0 +1,19 @@
+{
+  "file": "08-domestic-safety.txt",
+  "entities": [
+    {"category": "PERSON", "text": "Megan"},
+    {"category": "PERSON", "text": "Carlos"},
+    {"category": "PERSON", "text": "Derek Falk"},
+    {"category": "PERSON", "text": "Lily"},
+    {"category": "PERSON", "text": "Owen"},
+    {"category": "PERSON", "text": "Rosa Mendez"},
+    {"category": "CASE_ID", "text": "RO-2026-04471"},
+    {"category": "DATE", "text": "Monday"},
+    {"category": "DATE", "text": "June nineteenth"},
+    {"category": "ADDRESS", "text": "2140 Larkspur Lane"},
+    {"category": "ORG", "text": "Haven House"},
+    {"category": "ORG", "text": "family justice center"},
+    {"category": "SCHOOL", "text": "Brookfield Elementary"},
+    {"category": "PHONE", "text": "503-555-0182"}
+  ]
+}

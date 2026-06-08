@@ -1,0 +1,45 @@
+{
+  "file": "09-pip-performance.txt",
+  "entities": [
+    {
+      "category": "PERSON",
+      "text": "Priya"
+    },
+    {
+      "category": "PERSON",
+      "text": "Daniel"
+    },
+    {
+      "category": "PERSON",
+      "text": "Sofia"
+    },
+    {
+      "category": "MEDICAL_CONDITION",
+      "text": "multiple sclerosis"
+    },
+    {
+      "category": "MEDICAL_CONDITION",
+      "text": "Relapsing-remitting MS"
+    },
+    {
+      "category": "PERSON",
+      "text": "Dr. Okafor"
+    },
+    {
+      "category": "MEDICATION",
+      "text": "Tysabri"
+    },
+    {
+      "category": "PROJECT",
+      "text": "Atlas migration"
+    },
+    {
+      "category": "DATE",
+      "text": "the 30th"
+    },
+    {
+      "category": "ORG",
+      "text": "HR"
+    }
+  ]
+}

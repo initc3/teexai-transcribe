@@ -1,0 +1,37 @@
+{
+  "file": "12-settlement-negotiation.txt",
+  "entities": [
+    {
+      "category": "person",
+      "text": "RENATA"
+    },
+    {
+      "category": "person",
+      "text": "VIKRAM"
+    },
+    {
+      "category": "person",
+      "text": "Tomas Brandt"
+    },
+    {
+      "category": "person",
+      "text": "Priya Nair"
+    },
+    {
+      "category": "organization",
+      "text": "Halverson"
+    },
+    {
+      "category": "case_citation",
+      "text": "Edwards v. Aurora"
+    },
+    {
+      "category": "date",
+      "text": "July 9th"
+    },
+    {
+      "category": "date",
+      "text": "June 20th"
+    }
+  ]
+}

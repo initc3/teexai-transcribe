@@ -1,0 +1,14 @@
+node_modules/
+.smithers/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+data/
+build/
+*.wav
+voices/
+
+# dataset contracts + configs live here as json; override root *.json ignore
+!*.json

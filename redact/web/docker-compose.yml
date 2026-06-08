@@ -1,0 +1,10 @@
+services:
+  app:
+    image: ghcr.io/amiller/redactbench:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - ZAI_API_KEY=${ZAI_API_KEY}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
