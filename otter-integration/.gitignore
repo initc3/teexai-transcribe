@@ -1,0 +1,6 @@
+references/
+frames/
+audio/
+*.log
+otter_state.json
+*cookie*
