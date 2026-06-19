@@ -105,6 +105,21 @@ def recap(text, use_slide=True):
     return {"summary": r.json()["choices"][0]["message"]["content"].strip(), "used_slide": bool(slide)}
 
 
+def recap_to_matrix(use_slide=True):
+    """On-demand 'catch you up' for a joiner: recap the live transcript and post it to Matrix.
+    Stretch trigger (out of scope): fire this from Otter's presence socket on an actual new joiner."""
+    st = live_state(0)
+    if not st.get("live"):
+        raise RuntimeError("no live meeting to recap")
+    text = "\n".join(f"[{r['speaker']}] {r['text']}" for r in st["segments"])
+    out = recap(text, use_slide=use_slide)
+    title = st.get("title") or "live meeting"
+    head = f"📍 catching you up — {title}"
+    matrix.post(f"{head}\n{out['summary']}",
+                html=f"<b>{head}</b><br>" + out["summary"].replace("\n", "<br>"))
+    return out
+
+
 # --- conversation decoder: typed-node graph over the live transcript ---
 STATE = {}  # otid -> {topics: {label: id}, tcount, nodes: [...], done: set(uuid)}
 DECODE_BATCH = 4
@@ -214,6 +229,11 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/recap":
             try:
                 return self._send(200, json.dumps(recap(body.get("text", ""), body.get("use_slide", True))))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path == "/recap-matrix":
+            try:
+                return self._send(200, json.dumps(recap_to_matrix(body.get("use_slide", True))))
             except Exception as e:
                 return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         return self._send(404, "{}")

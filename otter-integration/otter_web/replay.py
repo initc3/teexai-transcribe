@@ -68,6 +68,7 @@ def main():
     ap.add_argument("--batch", type=int, default=6, help="segments revealed per poll")
     ap.add_argument("--max", type=int, default=0, help="cap total segments (0 = all)")
     ap.add_argument("--near", action="store_true", help="use the real NEAR decoder")
+    ap.add_argument("--recap", action="store_true", help="self-test recap_to_matrix() with a stubbed NEAR recap")
     ap.add_argument("--json", help="write final graph to this path")
     ap.add_argument("--price-in", type=float, default=0.0, help="$/1M input tokens (for cost estimate)")
     ap.add_argument("--price-out", type=float, default=0.0, help="$/1M output tokens")
@@ -83,6 +84,15 @@ def main():
     S.live_speech = lambda s: {"otid": "replay", "title": Path(args.file).stem}
     if not args.near:
         S.decode = stub_decode
+
+    if args.recap:
+        sess.advance(args.batch)  # reveal a window of transcript
+        S.recap = lambda *a, **k: {"summary": "• topic X\n• open question Y", "used_slide": False}
+        out = S.recap_to_matrix()
+        print(f"\nrecap returned: {out}")
+        assert out["summary"], "empty recap"
+        print("\nOK")
+        return
 
     usage = {"calls": 0, "prompt": 0, "completion": 0}
     orig_post = S.requests.post
