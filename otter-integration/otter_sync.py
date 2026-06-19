@@ -22,13 +22,13 @@ Usage:
   python3 otter_sync.py --audio         # also download mp3 recordings (big)
   python3 otter_sync.py --max 20        # process at most N this run (trickle the big backlog)
 """
-import argparse, io, json, re, time, zipfile
+import argparse, io, json, os, re, time, zipfile
 from pathlib import Path
-import browser_cookie3 as bc
 import requests
+from otter_session import open_session
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "references" / "otter"
+OUT = Path(os.environ.get("OTTER_OUT", ROOT / "references" / "otter"))
 STATE = Path(__file__).parent / "otter_state.json"
 BASE = "https://otter.ai/forward/api/v1/"
 PAUSE = 0.8       # between speeches
@@ -64,14 +64,8 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
 
-    jar = bc.chrome(domain_name="otter.ai")
-    s = requests.Session()
-    s.cookies = jar
-    s.headers.update({"referer": "https://otter.ai/", "user-agent": "Mozilla/5.0"})
-    uid = retrying(lambda: s.get(BASE + "user", timeout=30), "user").json()["userid"]
-    csrf = next(c.value for c in jar if c.name == "csrftoken")
-    sid = next(c.value for c in jar if c.name == "sessionid")
-    media_cookies = {"sessionid": sid, "csrftoken": csrf}  # for api.aisense.com assets
+    s = open_session()
+    uid, csrf, media_cookies = s.uid, s.csrf, s.media
 
     speeches = {}
     for src in ("owned", "shared"):

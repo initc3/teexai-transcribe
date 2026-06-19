@@ -19,8 +19,27 @@ the high-quality transcript Otter already produces.
 - **`otter_capture.py`** — Playwright HAR instrumentation (cookie-injected headless) to study
   the real web-app calls.
 - **`otter_web/{server.py,index.html}`** — `localhost:8137` web app: live transcript + recap
-  button + slide panel. Recap/vision via NEAR private inference (DeepSeek text, Gemini vision);
-  `/frame` proxies cookie-auth PNGs.
+  button + slide panel + **conversation graph** (Feed/Graph tabs). Recap/vision via NEAR private
+  inference (DeepSeek text, Gemini vision); `/frame` proxies cookie-auth PNGs.
+
+### Conversation graph (decoder + topic graph + decision lens)
+
+A server-side **decoder** batches new transcript segments (≥4) into one NEAR call that types each
+into a node (`topic|question|point|decision|divergence|action_item|aside`) with a topic label, then
+groups them into clusters. The same nodes power three views, no separate pipelines: the **topic
+graph** (cytoscape, click a cluster to recap just that thread — "what is this cluster? / go back a
+topic"), the **decisions rail** (filtered `decision`/`action_item` nodes), and the existing recap.
+State is per-meeting in `server.STATE[otid]`. `GET /graph` → `{topics, nodes, decisions}`. Design
+notes in `docs/decoder-graph-spec.md`; brainstorm/triage in `docs/conversation-tooling-brainstorm.md`.
+
+**`otter_web/replay.py`** mocks Otter from a captured diarized transcript and drives the live decode
+path in batches — no live meeting needed. Offline by default (deterministic stub decoder + asserts),
+or `--near` to exercise the real decoder:
+
+```
+python3 otter_web/replay.py path/to/transcript.txt --max 12 --batch 6        # offline
+python3 otter_web/replay.py path/to/transcript.txt --max 12 --batch 6 --near # real NEAR
+```
 
 ## Endpoints (verified live)
 

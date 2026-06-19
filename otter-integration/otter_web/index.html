@@ -20,7 +20,7 @@
   #recap:disabled { opacity: .5; cursor: default; }
   select { background: #15171f; border: 1px solid #2a2e3b; color: #cdd2da; border-radius: 6px; padding: 8px; font: inherit; }
   .main { flex: 1; display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
-  .feed { overflow-y: auto; padding: 16px 22px; border-right: 1px solid #1e2029; }
+  .feed { flex: 1; overflow-y: auto; padding: 16px 22px; }
   .feed .u { margin: 0 0 11px; color: #c3c8d2; }
   .feed .u:last-child { color: #eef1f6; }
   .side { display: flex; flex-direction: column; min-height: 0; }
@@ -36,7 +36,16 @@
   #out .ph { color: #5f6470; }
   #out .when { color: #6b7080; font-size: 11px; margin-bottom: 10px; }
   .err { color: #c0524a; }
+  .left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #1e2029; }
+  .tabs { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #16181f; }
+  .tab { background: #15171f; color: #9aa0ad; font-weight: 600; padding: 6px 12px; font-size: 13px; }
+  .tab.active { background: #1f2330; color: #cdd2da; }
+  #cy { flex: 1; min-height: 0; }
+  #decisions { padding: 8px 16px; max-height: 24%; overflow-y: auto; border-bottom: 1px solid #16181f; }
+  #decisions .d { margin: 0 0 7px; font-size: 13px; color: #cdd2da; }
+  #decisions .d b { color: #c9a227; text-transform: uppercase; font-size: 10px; letter-spacing: .06em; margin-right: 5px; }
 </style>
+<script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
 </head>
 <body>
 <header>
@@ -50,13 +59,22 @@
   <button id="recap">what were we talking about?</button>
 </header>
 <div class="main">
-  <div class="feed" id="feed"></div>
+  <div class="left">
+    <div class="tabs">
+      <button class="tab active" id="tabFeed">feed</button>
+      <button class="tab" id="tabGraph">graph</button>
+    </div>
+    <div class="feed" id="feed"></div>
+    <div id="cy" style="display:none"></div>
+  </div>
   <section class="side">
     <div id="slides">
       <img class="big" id="slideBig" />
       <div class="row" id="slideRow"></div>
       <div class="cap" id="slideCap"></div>
     </div>
+    <h3>decisions</h3>
+    <div id="decisions"><span class="ph">decisions &amp; action items collect here.</span></div>
     <h3>recap</h3>
     <div id="out"><span class="ph">Hit the button during a meeting and I'll tell you what's being discussed right now.</span></div>
   </section>
@@ -127,7 +145,89 @@ btn.onclick = async () => {
   btn.disabled = false;
 };
 
+// --- conversation graph ---
+const dec = document.getElementById('decisions');
+const tabFeed = document.getElementById('tabFeed'), tabGraph = document.getElementById('tabGraph');
+const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastN = -1;
+
+function ensureCy() {
+  if (cy) return cy;
+  cy = cytoscape({ container: document.getElementById('cy'),
+    style: [
+      { selector: 'node', css: { 'label': 'data(label)', 'color': '#cdd2da', 'font-size': '9px', 'text-wrap': 'wrap', 'text-max-width': '110px', 'background-color': '#8a8f9c', 'width': 13, 'height': 13 } },
+      { selector: 'node.topic', css: { 'shape': 'roundrectangle', 'background-color': '#c9a227', 'background-opacity': 0.07, 'border-width': 1, 'border-color': '#3a3f4d', 'color': '#c9a227', 'font-size': '11px', 'text-valign': 'top', 'padding': '10px' } },
+      { selector: 'node.question', css: { 'background-color': '#4a90d9' } },
+      { selector: 'node.decision', css: { 'background-color': '#2bb673', 'width': 16, 'height': 16 } },
+      { selector: 'node.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 16, 'height': 16 } },
+      { selector: 'node.divergence', css: { 'background-color': '#c0524a' } },
+      { selector: 'edge', css: { 'width': 1, 'line-color': '#2a2e3b', 'target-arrow-color': '#2a2e3b', 'target-arrow-shape': 'triangle', 'arrow-scale': 0.6, 'curve-style': 'bezier' } },
+    ] });
+  cy.on('tap', 'node.topic', e => clusterRecap(e.target.id(), e.target.data('label')));
+  cy.on('tap', 'node[kind]', e => showNode(e.target.id()));
+  return cy;
+}
+
+function renderGraph(d) {
+  ensureCy();
+  const els = [];
+  for (const t of d.topics) els.push({ data: { id: t.id, label: t.label }, classes: 'topic' });
+  let prev = null;
+  for (const n of d.nodes) {
+    els.push({ data: { id: n.id, parent: n.topic_id, kind: n.kind, label: n.speaker + ': ' + n.text }, classes: n.kind });
+    if (prev && n.rel !== 'new-topic') els.push({ data: { id: 'e_' + prev + '_' + n.id, source: prev, target: n.id } });
+    prev = n.id;
+  }
+  cy.json({ elements: els });
+  if (d.nodes.length !== lastN) { cy.layout({ name: 'cose', animate: false }).run(); lastN = d.nodes.length; }
+}
+
+function showNode(id) {
+  const n = nodeMap[id]; if (!n) return;
+  out.innerHTML = '<div class="when">' + n.kind + ' · ' + n.speaker + '</div>' + esc(n.text);
+}
+
+async function clusterRecap(tid, label) {
+  const text = gnodes.filter(n => n.topic_id === tid).map(n => n.speaker + ': ' + n.text).join('\n');
+  if (!text) return;
+  out.innerHTML = '<span class="ph">thinking…</span>';
+  try {
+    const r = await fetch('/recap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, use_slide: false }) });
+    const j = await r.json();
+    out.innerHTML = '<div class="when">cluster · ' + esc(label) + '</div>' + (j.error ? '<span class="err">' + j.error + '</span>' : esc(j.summary));
+  } catch (e) { out.innerHTML = '<span class="err">recap failed: ' + e + '</span>'; }
+}
+
+function renderDecisions(d) {
+  const set = new Set(d.decisions);
+  const ds = d.nodes.filter(n => set.has(n.id));
+  dec.innerHTML = ds.length ? ds.map(n => '<p class="d"><b>' + n.kind + '</b>' + esc(n.speaker + ': ' + n.text) + '</p>').join('')
+    : '<span class="ph">decisions &amp; action items collect here.</span>';
+}
+
+async function pollGraph() {
+  try {
+    const r = await fetch('/graph'); const d = await r.json();
+    if (d.error || !d.live) return;
+    gnodes = d.nodes; nodeMap = {}; for (const n of d.nodes) nodeMap[n.id] = n;
+    lastGraph = d; renderDecisions(d);
+    if (graphVisible) renderGraph(d);
+  } catch (e) {}
+}
+
+function switchView(v) {
+  graphVisible = v === 'graph';
+  feed.style.display = graphVisible ? 'none' : 'block';
+  document.getElementById('cy').style.display = graphVisible ? 'block' : 'none';
+  tabFeed.classList.toggle('active', !graphVisible);
+  tabGraph.classList.toggle('active', graphVisible);
+  if (graphVisible && lastGraph) { ensureCy(); cy.resize(); lastN = -1; renderGraph(lastGraph); }
+}
+tabFeed.onclick = () => switchView('feed');
+tabGraph.onclick = () => switchView('graph');
+
 poll(); setInterval(poll, 8000);
+pollGraph(); setInterval(pollGraph, 8000);
 </script>
 </body>
 </html>

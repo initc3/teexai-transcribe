@@ -4,3 +4,7 @@ audio/
 *.log
 otter_state.json
 *cookie*
+otter_capture.*
+.env
+.env.local
+*.token

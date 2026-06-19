@@ -15,8 +15,7 @@ Usage:
   python3 otter_live.py --otid <otid>   # follow a specific meeting
 """
 import argparse, time
-import browser_cookie3 as bc
-import requests
+from otter_session import open_session
 
 BASE = "https://otter.ai/forward/api/v1/"
 
@@ -28,10 +27,8 @@ def main():
     ap.add_argument("--duration", type=int, default=0, help="stop after N seconds (0=until meeting ends)")
     args = ap.parse_args()
 
-    s = requests.Session()
-    s.cookies = bc.chrome(domain_name="otter.ai")
-    s.headers.update({"referer": "https://otter.ai/", "user-agent": "Mozilla/5.0"})
-    uid = s.get(BASE + "user", timeout=30).json()["userid"]
+    s = open_session()
+    uid = s.uid
 
     otid = args.otid
     if not otid:

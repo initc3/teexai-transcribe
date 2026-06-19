@@ -10,12 +10,14 @@ it accounts for what's on screen; otherwise a fast text model.
 
   python3 server.py            # serves on http://localhost:8137
 """
-import base64, json, os, re
+import base64, json, os, re, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-import browser_cookie3 as bc
 import requests
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from otter_session import open_session
+from otter_web import matrix
 
 HERE = Path(__file__).parent
 PORT = int(os.environ.get("PORT", 8137))
@@ -25,24 +27,11 @@ TEXT_MODEL = os.environ.get("NEAR_MODEL", "deepseek-ai/DeepSeek-V4-Flash")
 VL_MODEL = os.environ.get("NEAR_VL_MODEL", "google/gemini-2.5-flash")
 
 
-def near_key():
-    if os.environ.get("NEAR_KEY"):
-        return os.environ["NEAR_KEY"]
-    envf = Path.home() / "projects" / "aishley" / ".env.local"
-    return re.search(r"^NEAR_KEY=(.+)$", envf.read_text(), re.M).group(1).strip()
-
-
-NEAR_KEY = near_key()
+NEAR_KEY = os.environ.get("NEAR_KEY") or os.environ["NEAR_API_KEY"]
 
 
 def otter():
-    jar = bc.chrome(domain_name="otter.ai")
-    s = requests.Session()
-    s.cookies = jar
-    s.headers.update({"referer": "https://otter.ai/", "user-agent": "Mozilla/5.0"})
-    s.uid = s.get(OTTER + "user", timeout=30).json()["userid"]
-    s.media = {c.name: c.value for c in jar if c.name in ("sessionid", "csrftoken")}
-    return s
+    return open_session()
 
 
 def live_speech(s):
@@ -63,7 +52,8 @@ def live_state(after):
         return {"live": False}
     d = s.get(OTTER + "speech", params={"userid": s.uid, "otid": sp["otid"]}, timeout=40).json()["speech"]
     segs = sorted(d.get("transcripts") or [], key=lambda x: x.get("order") or 0)
-    rows = [{"order": int(t.get("order") or 0), "text": (t.get("transcript") or "").strip()}
+    rows = [{"order": int(t.get("order") or 0), "uuid": t.get("uuid"), "speaker": f"S{t.get('label')}",
+             "text": (t.get("transcript") or "").strip()}
             for t in segs if (t.get("transcript") or "").strip()]
     rows = rows[-40:] if after <= 0 else [r for r in rows if r["order"] > after]
     mx = max((r["order"] for r in rows), default=after)
@@ -115,6 +105,70 @@ def recap(text, use_slide=True):
     return {"summary": r.json()["choices"][0]["message"]["content"].strip(), "used_slide": bool(slide)}
 
 
+# --- conversation decoder: typed-node graph over the live transcript ---
+STATE = {}  # otid -> {topics: {label: id}, tcount, nodes: [...], done: set(uuid)}
+DECODE_BATCH = 4
+DECODE_SYS = (
+    "You decode a meeting transcript into a typed conversation graph. You get the topics already open and a "
+    "batch of new numbered segments ([Sx] is a speaker cluster id). For each segment that carries meaning, emit "
+    "one node; skip pure filler/backchannel ('yeah', 'right'). Kinds: topic (frames a subject), question, point "
+    "(a substantive claim/idea), decision (something agreed/chosen), divergence (a tangent/disagreement), "
+    "action_item (a to-do), aside. Give each node a short topic label, REUSING an open topic label verbatim when "
+    "it fits, else a new short label. rel links it to the prior segment: new-topic|continues|reply-to|digression|"
+    "resolves. Return JSON only: {\"nodes\":[{\"i\":<segment index>,\"kind\":...,\"topic\":\"...\","
+    "\"text\":\"<=12 word canonical phrasing\",\"rel\":...}]}")
+
+
+def decode(open_topics, segs):
+    listing = "\n".join(f"{i}. [{s['speaker']}] {s['text']}" for i, s in enumerate(segs))
+    user = (f"Open topics: {', '.join(open_topics) or '(none yet)'}\n\n"
+            f"New segments (in order):\n{listing}\n\nReturn JSON only.")
+    r = requests.post(NEAR_URL, headers={"Authorization": f"Bearer {NEAR_KEY}", "content-type": "application/json"},
+                      json={"model": TEXT_MODEL, "max_tokens": 800, "temperature": 0.2,
+                            "response_format": {"type": "json_object"},
+                            "messages": [{"role": "system", "content": DECODE_SYS},
+                                         {"role": "user", "content": user}]},
+                      timeout=90)
+    r.raise_for_status()
+    return json.loads(r.json()["choices"][0]["message"]["content"]).get("nodes", [])
+
+
+def graph_state():
+    s = otter()
+    sp = live_speech(s)
+    if not sp:
+        return {"live": False}
+    otid = sp["otid"]
+    d = s.get(OTTER + "speech", params={"userid": s.uid, "otid": otid}, timeout=40).json()["speech"]
+    rows = [{"uuid": t.get("uuid"), "speaker": f"S{t.get('label')}", "text": (t.get("transcript") or "").strip()}
+            for t in sorted(d.get("transcripts") or [], key=lambda x: x.get("order") or 0)
+            if (t.get("transcript") or "").strip()]
+    st = STATE.setdefault(otid, {"topics": {}, "tcount": 0, "nodes": [], "done": set(), "announced": set()})
+    new = [r for r in rows if r["uuid"] not in st["done"]]
+    if len(new) >= DECODE_BATCH:
+        for nd in decode(list(st["topics"]), new):
+            i = nd.get("i")
+            if not isinstance(i, int) or i >= len(new):
+                continue
+            label = nd.get("topic") or "misc"
+            if label not in st["topics"]:
+                st["tcount"] += 1
+                st["topics"][label] = f"t{st['tcount']}"
+            node = {"id": new[i]["uuid"], "speaker": new[i]["speaker"], "kind": nd.get("kind", "point"),
+                    "text": nd.get("text") or new[i]["text"], "topic_id": st["topics"][label],
+                    "topic": label, "rel": nd.get("rel", "continues")}
+            st["nodes"].append(node)
+            if node["kind"] in ("decision", "action_item") and node["id"] not in st["announced"]:
+                st["announced"].add(node["id"])
+                matrix.post(f"🟢 {node['kind'].replace('_', ' ')}: {node['text']}  — {node['speaker']} · topic “{node['topic']}”")
+        for r in new:
+            st["done"].add(r["uuid"])
+    topics = [{"id": tid, "label": lbl, "node_ids": [n["id"] for n in st["nodes"] if n["topic_id"] == tid]}
+              for lbl, tid in st["topics"].items()]
+    decisions = [n["id"] for n in st["nodes"] if n["kind"] in ("decision", "action_item")]
+    return {"live": True, "title": sp.get("title"), "topics": topics, "nodes": st["nodes"], "decisions": decisions}
+
+
 class H(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         b = body if isinstance(body, bytes) else body.encode()
@@ -131,6 +185,11 @@ class H(BaseHTTPRequestHandler):
             after = int(re.search(r"after=(\d+)", self.path).group(1)) if "after=" in self.path else 0
             try:
                 return self._send(200, json.dumps(live_state(after)))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path.startswith("/graph"):
+            try:
+                return self._send(200, json.dumps(graph_state()))
             except Exception as e:
                 return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         if self.path.startswith("/frame"):
@@ -154,5 +213,6 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"otter live recap: http://localhost:{PORT}   (text={TEXT_MODEL}, vision={VL_MODEL})")
-    ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
+    host = os.environ.get("HOST", "127.0.0.1")
+    print(f"otter live recap: http://{host}:{PORT}   (text={TEXT_MODEL}, vision={VL_MODEL})")
+    ThreadingHTTPServer((host, PORT), H).serve_forever()
