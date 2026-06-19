@@ -44,6 +44,14 @@
   #decisions { padding: 8px 16px; max-height: 24%; overflow-y: auto; border-bottom: 1px solid #16181f; }
   #decisions .d { margin: 0 0 7px; font-size: 13px; color: #cdd2da; }
   #decisions .d b { color: #c9a227; text-transform: uppercase; font-size: 10px; letter-spacing: .06em; margin-right: 5px; }
+  #decisions .d.good b { color: #ff5ea8; }
+  #party { position: fixed; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; z-index: 99; }
+  #party .ball { font-size: 84px; opacity: 0; transform: scale(.3); }
+  #party.go .ball { animation: pop 1.6s ease-out forwards; }
+  #party .txt { position: absolute; bottom: 24%; color: #ff8fc6; font-weight: 700; font-size: 18px; opacity: 0; }
+  #party.go .txt { animation: rise 1.6s ease-out forwards; }
+  @keyframes pop { 0% { opacity: 0; transform: scale(.3) rotate(-20deg); } 25% { opacity: 1; transform: scale(1.25) rotate(10deg); } 55% { transform: scale(1) rotate(-6deg); } 100% { opacity: 0; transform: scale(1.1) rotate(0); } }
+  @keyframes rise { 0% { opacity: 0; transform: translateY(20px); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
 </style>
 <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
 </head>
@@ -58,6 +66,7 @@
   </select>
   <button id="recap">what were we talking about?</button>
 </header>
+<div id="party"><span class="ball">🎉</span><span class="txt">good point!</span></div>
 <div class="main">
   <div class="left">
     <div class="tabs">
@@ -199,10 +208,22 @@ async function clusterRecap(tid, label) {
 }
 
 function renderDecisions(d) {
-  const set = new Set(d.decisions);
-  const ds = d.nodes.filter(n => set.has(n.id));
-  dec.innerHTML = ds.length ? ds.map(n => '<p class="d"><b>' + n.kind + '</b>' + esc(n.speaker + ': ' + n.text) + '</p>').join('')
+  const set = new Set(d.decisions), good = new Set(d.good || []);
+  const ds = d.nodes.filter(n => set.has(n.id) || good.has(n.id));
+  dec.innerHTML = ds.length ? ds.map(n => good.has(n.id)
+      ? '<p class="d good"><b>✨ good point</b>' + esc(n.speaker + ': ' + n.text) + '</p>'
+      : '<p class="d"><b>' + n.kind + '</b>' + esc(n.speaker + ': ' + n.text) + '</p>').join('')
     : '<span class="ph">decisions &amp; action items collect here.</span>';
+}
+
+const party = document.getElementById('party');
+let goodSeen = new Set(), partyInit = false;
+function partyBall(ids) {
+  if (!partyInit) { goodSeen = new Set(ids); partyInit = true; return; }  // skip backlog on first load
+  const fresh = ids.filter(id => !goodSeen.has(id));
+  for (const id of ids) goodSeen.add(id);
+  if (!fresh.length) return;
+  party.classList.remove('go'); void party.offsetWidth; party.classList.add('go');
 }
 
 async function pollGraph() {
@@ -210,7 +231,7 @@ async function pollGraph() {
     const r = await fetch('/graph'); const d = await r.json();
     if (d.error || !d.live) return;
     gnodes = d.nodes; nodeMap = {}; for (const n of d.nodes) nodeMap[n.id] = n;
-    lastGraph = d; renderDecisions(d);
+    lastGraph = d; renderDecisions(d); partyBall(d.good || []);
     if (graphVisible) renderGraph(d);
   } catch (e) {}
 }

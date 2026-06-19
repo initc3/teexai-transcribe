@@ -40,8 +40,9 @@ def stub_decode(open_topics, segs):
         kind = ("question" if "?" in txt
                 else "decision" if re.search(r"\b(let's|lets|we'll|agreed|decide|go with)\b", txt.lower())
                 else "point")
+        good = bool(re.search(r"\b(good point|exactly|the key|brilliant|that's right|love that|great idea)\b", txt.lower()))
         bucket = int(s["uuid"][1:]) // 8
-        nodes.append({"i": i, "kind": kind, "topic": f"topic-{bucket}", "text": txt[:60], "rel": "continues"})
+        nodes.append({"i": i, "kind": kind, "topic": f"topic-{bucket}", "text": txt[:60], "rel": "continues", "good": good})
     return nodes
 
 
@@ -108,10 +109,11 @@ def main():
         seen = len(nodes)
         print(f"\n--- poll {step} (segments {sess.k}/{len(segs)}, {len(nodes)} nodes) ---")
         for n in new:
-            print(f"  [{n['kind']:11}] {n['speaker']} · {n['topic'][:24]:24} | {n['text'][:70]}")
+            star = " ✨" if n.get("good") else ""
+            print(f"  [{n['kind']:11}] {n['speaker']} · {n['topic'][:24]:24} | {n['text'][:70]}{star}")
 
     print(f"\n=== final: {len(last['nodes'])} nodes, {len(last['topics'])} topics, "
-          f"{len(last['decisions'])} decisions ===")
+          f"{len(last['decisions'])} decisions, {len(last['good'])} good points ===")
     for t in last["topics"]:
         print(f"  topic {t['id']}: {t['label']}  ({len(t['node_ids'])} nodes)")
 
@@ -130,6 +132,7 @@ def main():
     assert last["nodes"], "no nodes decoded"
     assert set(last["decisions"]) <= {n["id"] for n in last["nodes"]}, "decisions not a subset of nodes"
     assert all(n["topic_id"] for n in last["nodes"]), "node missing topic_id"
+    assert set(last["good"]) == {n["id"] for n in last["nodes"] if n.get("good")}, "good list mismatch"
     print("\nOK")
 
 

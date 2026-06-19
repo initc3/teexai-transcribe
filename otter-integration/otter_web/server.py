@@ -115,8 +115,10 @@ DECODE_SYS = (
     "(a substantive claim/idea), decision (something agreed/chosen), divergence (a tangent/disagreement), "
     "action_item (a to-do), aside. Give each node a short topic label, REUSING an open topic label verbatim when "
     "it fits, else a new short label. rel links it to the prior segment: new-topic|continues|reply-to|digression|"
-    "resolves. Return JSON only: {\"nodes\":[{\"i\":<segment index>,\"kind\":...,\"topic\":\"...\","
-    "\"text\":\"<=12 word canonical phrasing\",\"rel\":...}]}")
+    "resolves. Add \"good\":true on a node ONLY when it is a genuinely strong/insightful point — a crisp idea "
+    "everyone reacts to or that visibly moves the discussion; be sparing. Return JSON only: "
+    "{\"nodes\":[{\"i\":<segment index>,\"kind\":...,\"topic\":\"...\","
+    "\"text\":\"<=12 word canonical phrasing\",\"rel\":...,\"good\":<true|omit>}]}")
 
 
 def decode(open_topics, segs):
@@ -156,17 +158,22 @@ def graph_state():
                 st["topics"][label] = f"t{st['tcount']}"
             node = {"id": new[i]["uuid"], "speaker": new[i]["speaker"], "kind": nd.get("kind", "point"),
                     "text": nd.get("text") or new[i]["text"], "topic_id": st["topics"][label],
-                    "topic": label, "rel": nd.get("rel", "continues")}
+                    "topic": label, "rel": nd.get("rel", "continues"), "good": bool(nd.get("good"))}
             st["nodes"].append(node)
             if node["kind"] in ("decision", "action_item") and node["id"] not in st["announced"]:
                 st["announced"].add(node["id"])
                 matrix.post(f"🟢 {node['kind'].replace('_', ' ')}: {node['text']}  — {node['speaker']} · topic “{node['topic']}”")
+            if node["good"] and node["id"] not in st["announced"]:
+                st["announced"].add(node["id"])
+                matrix.post(f"✨ good point — {node['text']} — {node['speaker']}")
         for r in new:
             st["done"].add(r["uuid"])
     topics = [{"id": tid, "label": lbl, "node_ids": [n["id"] for n in st["nodes"] if n["topic_id"] == tid]}
               for lbl, tid in st["topics"].items()]
     decisions = [n["id"] for n in st["nodes"] if n["kind"] in ("decision", "action_item")]
-    return {"live": True, "title": sp.get("title"), "topics": topics, "nodes": st["nodes"], "decisions": decisions}
+    good = [n["id"] for n in st["nodes"] if n.get("good")]
+    return {"live": True, "title": sp.get("title"), "topics": topics, "nodes": st["nodes"],
+            "decisions": decisions, "good": good}
 
 
 class H(BaseHTTPRequestHandler):
