@@ -123,6 +123,7 @@ def recap_to_matrix(use_slide=True):
 # --- conversation decoder: typed-node graph over the live transcript ---
 STATE = {}  # otid -> {topics: {label: id}, tcount, nodes: [...], done: set(uuid)}
 DECODE_BATCH = 4
+DECODE_MAX = 10   # cap segments per decode call so the model's JSON fits max_tokens (live backlog can be large)
 DECODE_SYS = (
     "You decode a meeting transcript into a typed conversation graph. You get the topics already open and a "
     "batch of new numbered segments ([Sx] is a speaker cluster id). For each segment that carries meaning, emit "
@@ -160,8 +161,11 @@ def graph_state():
     rows = [{"uuid": t.get("uuid"), "speaker": f"S{t.get('label')}", "text": (t.get("transcript") or "").strip()}
             for t in sorted(d.get("transcripts") or [], key=lambda x: x.get("order") or 0)
             if (t.get("transcript") or "").strip()]
-    st = STATE.setdefault(otid, {"topics": {}, "tcount": 0, "nodes": [], "done": set(), "announced": set()})
-    new = [r for r in rows if r["uuid"] not in st["done"]]
+    st = STATE.setdefault(otid, {"topics": {}, "tcount": 0, "nodes": [], "done": set(), "announced": set(), "started": False})
+    if not st["started"]:
+        st["started"] = True
+        matrix.post(f"📡 meeting started — “{sp.get('title') or 'untitled'}”. Watching live; I'll surface decisions, good points, and a recap on request.")
+    new = [r for r in rows if r["uuid"] not in st["done"]][:DECODE_MAX]
     if len(new) >= DECODE_BATCH:
         for nd in decode(list(st["topics"]), new):
             i = nd.get("i")
