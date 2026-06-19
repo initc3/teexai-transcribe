@@ -9,6 +9,9 @@ services:
       - OTTER_SESSIONID=${OTTER_SESSIONID}
       - OTTER_CSRFTOKEN=${OTTER_CSRFTOKEN}
       - NEAR_API_KEY=${NEAR_API_KEY}
+      - MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
+      - MATRIX_ROOM=${MATRIX_ROOM}
+      - MATRIX_TOKEN=${MATRIX_TOKEN}
       - HOST=0.0.0.0
       - OTTER_OUT=/data/otter
     volumes:
