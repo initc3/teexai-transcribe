@@ -69,6 +69,7 @@ def main():
     ap.add_argument("--max", type=int, default=0, help="cap total segments (0 = all)")
     ap.add_argument("--near", action="store_true", help="use the real NEAR decoder")
     ap.add_argument("--recap", action="store_true", help="self-test recap_to_matrix() with a stubbed NEAR recap")
+    ap.add_argument("--durable", action="store_true", help="self-test STATE persistence + transcript jsonl across a restart")
     ap.add_argument("--json", help="write final graph to this path")
     ap.add_argument("--price-in", type=float, default=0.0, help="$/1M input tokens (for cost estimate)")
     ap.add_argument("--price-out", type=float, default=0.0, help="$/1M output tokens")
@@ -91,6 +92,53 @@ def main():
         out = S.recap_to_matrix()
         print(f"\nrecap returned: {out}")
         assert out["summary"], "empty recap"
+        print("\nOK")
+        return
+
+    if args.durable:
+        import tempfile
+        if not args.near:
+            S.decode = stub_decode
+        tmp = Path(tempfile.mkdtemp(prefix="otter-durable-"))
+        S.DATA, S.STATE_DIR, S.LIVE_DIR = tmp, tmp / "state", tmp / "live"
+        posts = []
+        S.matrix.post = lambda body, html=None: posts.append(body)
+
+        def drain():
+            sess.k = 0
+            while sess.k < len(segs):
+                sess.advance(args.batch)
+                S.graph_state()
+
+        print(f"data dir: {tmp}")
+        drain()  # first pass — live meeting
+        first = list(posts)
+        st = S.STATE["replay"]
+        print(f"pass 1: {len(first)} matrix posts, {len(st['done'])} done, {len(st['announced'])} announced, "
+              f"started={st['started']}")
+        assert first, "first pass posted nothing"
+
+        jsonl = S.LIVE_DIR / "replay.jsonl"
+        lines = [json.loads(l) for l in jsonl.read_text().splitlines()]
+        uuids = [l["uuid"] for l in lines]
+        assert len(uuids) == len(set(uuids)), "duplicate uuid in transcript jsonl"
+        assert len(uuids) == len({s["uuid"] for s in segs}), "transcript missing segments"
+        print(f"transcript jsonl: {len(lines)} segments, no dup uuids  ({jsonl})")
+
+        # --- simulate restart: drop in-memory STATE, reload from disk ---
+        S.STATE.clear()
+        posts.clear()
+        reloaded = S.load_state("replay")
+        assert reloaded["done"] == st["done"] and reloaded["announced"] == st["announced"], "reload mismatch"
+        print(f"after restart (reloaded from disk): {len(reloaded['done'])} done, "
+              f"{len(reloaded['announced'])} announced, started={reloaded['started']}")
+
+        drain()  # second pass — everything already done/announced
+        print(f"pass 2: {len(posts)} new matrix posts")
+        assert not posts, f"restart re-posted {len(posts)}: {posts}"
+        after = [json.loads(l) for l in jsonl.read_text().splitlines()]
+        assert len(after) == len(lines), "second pass re-appended transcript"
+        print("transcript unchanged on second pass (idempotent)")
         print("\nOK")
         return
 

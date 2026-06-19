@@ -28,6 +28,11 @@ VL_MODEL = os.environ.get("NEAR_VL_MODEL", "google/gemini-2.5-flash")
 
 
 NEAR_KEY = os.environ.get("NEAR_KEY") or os.environ["NEAR_API_KEY"]
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:8137")
+
+DATA = Path(os.environ.get("OTTER_OUT", "/data/otter" if os.path.isdir("/data") else str(HERE / "data")))
+STATE_DIR = DATA / "state"
+LIVE_DIR = DATA / "live"
 
 
 def otter():
@@ -151,6 +156,43 @@ def decode(open_topics, segs):
     return json.loads(r.json()["choices"][0]["message"]["content"]).get("nodes", [])
 
 
+def load_state(otid):
+    """Load persisted STATE[otid] from disk (sets serialized as lists), else a fresh dict."""
+    if otid in STATE:
+        return STATE[otid]
+    p = STATE_DIR / f"{otid}.json"
+    if p.exists():
+        d = json.loads(p.read_text())
+        for k in ("done", "announced", "logged"):
+            d[k] = set(d.get(k, []))
+        STATE[otid] = d
+    else:
+        STATE[otid] = {"topics": {}, "tcount": 0, "nodes": [], "done": set(), "announced": set(),
+                       "logged": set(), "started": False}
+    return STATE[otid]
+
+
+def save_state(otid, st):
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    d = dict(st, done=sorted(st["done"]), announced=sorted(st["announced"]), logged=sorted(st["logged"]))
+    tmp = STATE_DIR / f"{otid}.json.tmp"
+    tmp.write_text(json.dumps(d))
+    tmp.rename(STATE_DIR / f"{otid}.json")
+
+
+def append_transcript(otid, rows, logged):
+    """Append uuids not yet in `logged` to /data/otter/live/<otid>.jsonl, idempotent by uuid."""
+    new = [r for r in rows if r["uuid"] not in logged]
+    if not new:
+        return
+    LIVE_DIR.mkdir(parents=True, exist_ok=True)
+    with (LIVE_DIR / f"{otid}.jsonl").open("a") as f:
+        for i, r in enumerate(new):
+            f.write(json.dumps({"order": len(logged) + i, "uuid": r["uuid"],
+                                "speaker": r["speaker"], "text": r["text"]}) + "\n")
+    logged.update(r["uuid"] for r in new)
+
+
 def graph_state():
     s = otter()
     sp = live_speech(s)
@@ -161,10 +203,11 @@ def graph_state():
     rows = [{"uuid": t.get("uuid"), "speaker": f"S{t.get('label')}", "text": (t.get("transcript") or "").strip()}
             for t in sorted(d.get("transcripts") or [], key=lambda x: x.get("order") or 0)
             if (t.get("transcript") or "").strip()]
-    st = STATE.setdefault(otid, {"topics": {}, "tcount": 0, "nodes": [], "done": set(), "announced": set(), "started": False})
+    st = load_state(otid)
+    append_transcript(otid, rows, st["logged"])
     if not st["started"]:
         st["started"] = True
-        matrix.post(f"📡 meeting started — “{sp.get('title') or 'untitled'}”. Watching live; I'll surface decisions, good points, and a recap on request.")
+        matrix.post(f"📡 meeting started — “{sp.get('title') or 'untitled'}”. Watching live; I'll surface decisions, good points, and a recap on request. Watch it live: {BASE_URL}/")
     new = [r for r in rows if r["uuid"] not in st["done"]][:DECODE_MAX]
     if len(new) >= DECODE_BATCH:
         for nd in decode(list(st["topics"]), new):
@@ -187,6 +230,7 @@ def graph_state():
                 matrix.post(f"✨ good point — {node['text']} — {node['speaker']}")
         for r in new:
             st["done"].add(r["uuid"])
+    save_state(otid, st)
     topics = [{"id": tid, "label": lbl, "node_ids": [n["id"] for n in st["nodes"] if n["topic_id"] == tid]}
               for lbl, tid in st["topics"].items()]
     decisions = [n["id"] for n in st["nodes"] if n["kind"] in ("decision", "action_item")]

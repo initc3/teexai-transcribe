@@ -10,3 +10,5 @@ otter_capture.*
 *.token
 matrix_spool/
 nio_store/
+otter_web/data/
+*crosssign_private_keys*
