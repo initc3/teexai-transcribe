@@ -82,7 +82,12 @@ def main():
 
     sess = FakeSession(segs)
     S.otter = lambda: sess
-    S.live_speech = lambda s: {"otid": "replay", "title": Path(args.file).stem}
+    stem = Path(args.file).stem
+    otid = stem.rsplit("__", 1)[-1] if "__" in stem else "replay"
+    m = re.match(r"(\d{4}-\d{2}-\d{2})_(.+?)__", stem)
+    title = (m.group(2).replace("_", " ") if m else stem)
+    started = m.group(1) if m else None
+    S.live_speech = lambda s: {"otid": otid, "title": title, "created_at": started}
     if not args.near:
         S.decode = stub_decode
 
@@ -113,12 +118,12 @@ def main():
         print(f"data dir: {tmp}")
         drain()  # first pass — live meeting
         first = list(posts)
-        st = S.STATE["replay"]
+        st = S.STATE[otid]
         print(f"pass 1: {len(first)} matrix posts, {len(st['done'])} done, {len(st['announced'])} announced, "
               f"started={st['started']}")
         assert first, "first pass posted nothing"
 
-        jsonl = S.LIVE_DIR / "replay.jsonl"
+        jsonl = S.LIVE_DIR / f"{otid}.jsonl"
         lines = [json.loads(l) for l in jsonl.read_text().splitlines()]
         uuids = [l["uuid"] for l in lines]
         assert len(uuids) == len(set(uuids)), "duplicate uuid in transcript jsonl"
@@ -128,7 +133,7 @@ def main():
         # --- simulate restart: drop in-memory STATE, reload from disk ---
         S.STATE.clear()
         posts.clear()
-        reloaded = S.load_state("replay")
+        reloaded = S.load_state(otid)
         assert reloaded["done"] == st["done"] and reloaded["announced"] == st["announced"], "reload mismatch"
         print(f"after restart (reloaded from disk): {len(reloaded['done'])} done, "
               f"{len(reloaded['announced'])} announced, started={reloaded['started']}")

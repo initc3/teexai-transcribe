@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>otter — what were we talking about?</title>
+<title>otter — conversations</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body { margin: 0; font: 15px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
          background: #0b0c10; color: #d7dae0; display: flex; flex-direction: column; height: 100vh; }
   header { padding: 12px 18px; border-bottom: 1px solid #1e2029; display: flex; gap: 12px; align-items: center; }
-  header b { color: #8ad; font-size: 16px; }
+  header b { color: #8ad; font-size: 16px; cursor: pointer; }
   header .meet { color: #6b7080; font-size: 13px; margin-right: auto; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: #2a2e3b; display: inline-block; margin-right: 6px; vertical-align: -1px; }
   .dot.live { background: #2b6; animation: blink .9s infinite; } @keyframes blink { 50% { opacity: .25; } }
@@ -19,10 +19,34 @@
   #recap:active { transform: translateY(1px); }
   #recap:disabled { opacity: .5; cursor: default; }
   select { background: #15171f; border: 1px solid #2a2e3b; color: #cdd2da; border-radius: 6px; padding: 8px; font: inherit; }
+  #back { background: #15171f; color: #9aa0ad; font-size: 13px; display: none; }
+
+  /* conversations list */
+  #list { flex: 1; overflow-y: auto; padding: 20px 24px; display: none; }
+  #list.show { display: block; }
+  #list h2 { color: #c9a227; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 14px; }
+  .card { background: #12141c; border: 1px solid #1e2029; border-radius: 9px; padding: 14px 16px; margin: 0 0 10px; cursor: pointer; transition: border-color .12s; }
+  .card:hover { border-color: #3a4150; }
+  .card .t { font-size: 15px; color: #e6e9ef; display: flex; align-items: center; gap: 8px; }
+  .card .t .share { margin-left: auto; background: #1f2330; color: #9aa0ad; font-size: 11px; font-weight: 600; padding: 4px 10px; }
+  .card .t .share:hover { color: #cdd2da; }
+  .card .meta { color: #6b7080; font-size: 12px; margin-top: 5px; }
+  .card .meta .pill { color: #9aa0ad; margin-right: 12px; }
+  .card .meta .pill b { color: #c9a227; }
+  .card .meta .pill.good b { color: #ff5ea8; }
+  .badge { background: #143; color: #2b6; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; letter-spacing: .05em; }
+  .badge.live { background: #0c2c1a; color: #2eea7e; }
+
+  /* conversation view */
   .main { flex: 1; display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
+  .main.hide { display: none; }
   .feed { flex: 1; overflow-y: auto; padding: 16px 22px; }
   .feed .u { margin: 0 0 11px; color: #c3c8d2; }
-  .feed .u:last-child { color: #eef1f6; }
+  .feed .u .spk { color: #5f6b85; margin-right: 8px; font-size: 12px; }
+  .feed .u.mark { border-left: 2px solid #c9a227; padding-left: 10px; }
+  .feed .u.mark.good { border-left-color: #ff5ea8; }
+  .feed .u .tag { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; margin-left: 8px; color: #c9a227; }
+  .feed .u.good .tag { color: #ff5ea8; }
   .side { display: flex; flex-direction: column; min-height: 0; }
   .side h3 { margin: 0; padding: 11px 18px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #c9a227; border-bottom: 1px solid #16181f; }
   #slides { padding: 10px 14px; border-bottom: 1px solid #16181f; display: none; flex: 0 0 auto; max-height: 38%; overflow-y: auto; }
@@ -32,6 +56,19 @@
   #slides .row img { height: 46px; border-radius: 4px; border: 1px solid #232734; cursor: pointer; opacity: .65; }
   #slides .row img:hover { opacity: 1; }
   #slides .cap { color: #5f6470; font-size: 10px; margin-top: 4px; }
+  #audience { padding: 12px 18px; border-bottom: 1px solid #16181f; font-size: 13px; }
+  #audience .row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #audience .sug { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 5px; letter-spacing: .05em; text-transform: uppercase; }
+  #audience .sug.private { background: #2a1a1a; color: #e08a8a; }
+  #audience .sug.cohort { background: #1a2330; color: #6fb0e8; }
+  #audience .sug.public { background: #0c2c1a; color: #2eea7e; }
+  #audience .conf { color: #6b7080; font-size: 11px; }
+  #audience .rat { color: #c3c8d2; margin: 4px 0 6px; }
+  #audience .red { color: #d09a4a; font-size: 12px; margin: 2px 0; }
+  #audience .red b { color: #c0524a; text-transform: uppercase; font-size: 9px; letter-spacing: .06em; margin-right: 5px; }
+  #audience .accept { display: flex; gap: 6px; margin-top: 8px; }
+  #audience .accept button { background: #15171f; color: #9aa0ad; font-size: 12px; padding: 5px 11px; font-weight: 600; }
+  #audience .accept button.on { background: #1f2330; color: #cdd2da; outline: 1px solid #3a4150; }
   #out { padding: 16px 20px; overflow-y: auto; white-space: pre-wrap; font-size: 14.5px; line-height: 1.6; color: #e6e9ef; flex: 1; }
   #out .ph { color: #5f6470; }
   #out .when { color: #6b7080; font-size: 11px; margin-bottom: 10px; }
@@ -57,20 +94,24 @@
 </head>
 <body>
 <header>
-  <b>otter live</b>
-  <span class="meet" id="meet"><span class="dot" id="dot"></span>looking for a live meeting…</span>
-  <select id="win" title="how far back to recap">
+  <b id="home">otter conversations</b>
+  <span class="meet" id="meet"></span>
+  <button id="back">← all conversations</button>
+  <select id="win" title="how far back to recap" style="display:none">
     <option value="40">last bit</option>
     <option value="120" selected>~last few min</option>
     <option value="400">longer</option>
   </select>
-  <button id="recap">what were we talking about?</button>
+  <button id="recap" style="display:none">what were we talking about?</button>
 </header>
 <div id="party"><span class="ball">🎉</span><span class="txt">good point!</span></div>
-<div class="main">
+
+<div id="list" class="show"></div>
+
+<div class="main hide">
   <div class="left">
     <div class="tabs">
-      <button class="tab active" id="tabFeed">feed</button>
+      <button class="tab active" id="tabFeed">transcript</button>
       <button class="tab" id="tabGraph">graph</button>
     </div>
     <div class="feed" id="feed"></div>
@@ -82,20 +123,182 @@
       <div class="row" id="slideRow"></div>
       <div class="cap" id="slideCap"></div>
     </div>
-    <h3>decisions</h3>
-    <div id="decisions"><span class="ph">decisions &amp; action items collect here.</span></div>
+    <h3>audience</h3>
+    <div id="audience"><span class="ph">who is this fit to share with? propose &amp; accept.</span></div>
+    <h3>decisions &amp; good points</h3>
+    <div id="decisions"><span class="ph">decisions, action items &amp; good points collect here.</span></div>
     <h3>recap</h3>
-    <div id="out"><span class="ph">Hit the button during a meeting and I'll tell you what's being discussed right now.</span></div>
+    <div id="out"><span class="ph">Open a conversation and hit recap for "what were we talking about?"</span></div>
   </section>
 </div>
+
 <script>
+const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+// ---------- access model: owner / view / public ----------
+let ownerToken = null, viewMode = null;  // viewMode = {otid, sig}
+(function bootAuth() {
+  const h = location.hash || '';
+  let m;
+  if ((m = h.match(/^#owner=(.+)$/))) {
+    ownerToken = decodeURIComponent(m[1]);
+    localStorage.setItem('otter_owner_token', ownerToken);
+  } else if ((m = h.match(/^#view=([^.]+)\.([0-9a-f]+)$/))) {
+    viewMode = { otid: m[1], sig: m[2] };
+  } else {
+    ownerToken = localStorage.getItem('otter_owner_token');
+  }
+  if (h) history.replaceState(null, '', location.pathname + location.search);
+})();
+function api(path, opts) {
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers);
+  if (ownerToken) headers['X-Auth-Token'] = ownerToken;
+  return fetch(path, Object.assign({}, opts, { headers }));
+}
+
+const listEl = document.getElementById('list'), mainEl = document.querySelector('.main');
 const feed = document.getElementById('feed'), out = document.getElementById('out');
-const meet = document.getElementById('meet'), dot = document.getElementById('dot');
-const btn = document.getElementById('recap'), win = document.getElementById('win');
+const meet = document.getElementById('meet'), btn = document.getElementById('recap'), win = document.getElementById('win');
+const back = document.getElementById('back'), home = document.getElementById('home');
 const slides = document.getElementById('slides'), slideBig = document.getElementById('slideBig');
 const slideRow = document.getElementById('slideRow'), slideCap = document.getElementById('slideCap');
-let after = 0, segs = [], live = false, lastSlide = '';
+const dec = document.getElementById('decisions');
+const tabFeed = document.getElementById('tabFeed'), tabGraph = document.getElementById('tabGraph');
 
+// view: 'list' or otid; cur = {otid, live}
+let cur = null, after = 0, segs = [], lastSlide = '';
+let timers = [];
+function clearTimers() { timers.forEach(clearInterval); timers = []; }
+
+// ---------- conversations list ----------
+async function loadList() {
+  cur = null; clearTimers();
+  listEl.classList.add('show'); mainEl.classList.add('hide');
+  back.style.display = 'none'; btn.style.display = 'none'; win.style.display = 'none'; meet.textContent = '';
+  home.textContent = 'otter conversations';
+  const r = await api('/conversations'); const d = await r.json();
+  if (d.error) { listEl.innerHTML = '<span class="err">' + esc(d.error) + '</span>'; return; }
+  const live = d.filter(c => c.live), past = d.filter(c => !c.live);
+  let html = '';
+  if (live.length) html += '<h2>live now</h2>' + live.map(card).join('');
+  html += '<h2>past conversations</h2>' + (past.length ? past.map(card).join('') : '<span class="ph">none stored yet.</span>');
+  listEl.innerHTML = html;
+  for (const el of listEl.querySelectorAll('.card')) el.onclick = e => {
+    if (e.target.classList.contains('share')) return;
+    open(el.dataset.otid, el.dataset.live === '1');
+  };
+  for (const s of listEl.querySelectorAll('.share')) s.onclick = ev => { ev.stopPropagation(); shareLink(s.dataset.otid, s); };
+}
+function card(c) {
+  const badge = c.live ? '<span class="badge live">● LIVE</span>' : '';
+  const when = c.started_at || c.date || '';
+  return `<div class="card" data-otid="${esc(c.otid)}" data-live="${c.live ? 1 : 0}">
+    <div class="t">${esc(c.title)} ${badge}<button class="share" data-otid="${esc(c.otid)}">share</button></div>
+    <div class="meta">${when ? '<span class="pill">' + esc(when) + '</span>' : ''}
+      <span class="pill"><b>${c.n_segments}</b> segments</span>
+      <span class="pill"><b>${c.n_decisions}</b> decisions</span>
+      <span class="pill good"><b>${c.n_good}</b> good</span></div></div>`;
+}
+async function shareLink(otid, el) {
+  const r = await api('/sharelink?otid=' + encodeURIComponent(otid)); const d = await r.json();
+  if (d.error) { el.textContent = d.error; return; }
+  await navigator.clipboard.writeText(d.url);
+  const o = el.textContent; el.textContent = 'copied!'; setTimeout(() => el.textContent = o, 1500);
+}
+
+// ---------- open a conversation ----------
+function open(otid, live) {
+  cur = { otid, live }; clearTimers();
+  listEl.classList.remove('show'); mainEl.classList.remove('hide');
+  back.style.display = 'inline-block';
+  after = 0; segs = []; lastSlide = ''; feed.innerHTML = ''; lastN = -1; gnodes = []; nodeMap = {};
+  partyInit = false; goodSeen = new Set();
+  out.innerHTML = '<span class="ph">loading…</span>';
+  document.getElementById('audience').innerHTML = '<span class="ph">who is this fit to share with? propose &amp; accept.</span>';
+  switchView('feed');
+  if (live) startLive(); else loadStored(otid);
+}
+back.onclick = loadList;
+home.onclick = loadList;
+
+// ---------- stored (past) conversation ----------
+async function loadStored(otid, sig) {
+  let url = '/transcript?otid=' + encodeURIComponent(otid);
+  if (sig) url += '&sig=' + encodeURIComponent(sig);
+  const r = await api(url); const d = await r.json();
+  if (d.error) { feed.innerHTML = '<span class="err">' + esc(d.error) + '</span>'; return; }
+  meet.innerHTML = '<span class="dot"></span>' + esc(d.title);
+  home.textContent = d.title;
+  btn.style.display = 'none'; win.style.display = 'none';
+  const marks = nodeMarks(d);
+  feed.innerHTML = d.segments.map(s => segHtml(s, marks)).join('') || '<span class="ph">no transcript stored.</span>';
+  renderDecisions(d); lastGraph = d;
+  gnodes = d.nodes; nodeMap = {}; for (const n of d.nodes) nodeMap[n.id] = n;
+  out.innerHTML = '<span class="ph">stored conversation. tap a topic in the graph to recap it.</span>';
+  initAudience(otid, d.visibility);
+}
+
+// ---------- audience proposer (owner only) ----------
+const audienceEl = document.getElementById('audience');
+function acceptRow(otid, current, proposal) {
+  const tiers = ['private', 'cohort', 'public'];
+  return '<div class="accept">' + tiers.map(t =>
+    `<button data-vis="${t}" class="${t === current ? 'on' : ''}">${t}</button>`).join('') +
+    '</div>';
+}
+function renderAudience(otid, current, p) {
+  let h = `<div class="row1"><span class="sug ${esc(p.suggested)}">${esc(p.suggested)}</span>` +
+    `<span class="conf">conf ${(+p.confidence || 0).toFixed(2)} · now: <b>${esc(current)}</b></span></div>`;
+  h += '<div class="rat">' + esc(p.rationale || '') + '</div>';
+  for (const r of (p.redactions || [])) h += '<div class="red"><b>redact</b>' + esc(r) + '</div>';
+  h += acceptRow(otid, current, p);
+  audienceEl.innerHTML = h;
+  for (const b of audienceEl.querySelectorAll('.accept button'))
+    b.onclick = () => setVisibility(otid, b.dataset.vis, p);
+}
+async function initAudience(otid, current) {
+  if (viewMode) { audienceEl.style.display = 'none'; return; }  // owner-only card
+  audienceEl.style.display = 'block';
+  audienceEl.innerHTML = '<span class="ph">proposing audience…</span>';
+  try {
+    const r = await api('/audience?otid=' + encodeURIComponent(otid)); const p = await r.json();
+    if (p.error) { audienceEl.innerHTML = '<span class="err">' + esc(p.error) + '</span>'; return; }
+    renderAudience(otid, current, p);
+    audienceEl._proposal = p;
+  } catch (e) { audienceEl.innerHTML = '<span class="err">audience failed: ' + e + '</span>'; }
+}
+async function setVisibility(otid, vis, p) {
+  try {
+    const r = await api('/visibility?otid=' + encodeURIComponent(otid), {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ visibility: vis }) });
+    const d = await r.json();
+    if (d.error) { audienceEl.insertAdjacentHTML('beforeend', '<div class="err">' + esc(d.error) + '</div>'); return; }
+    renderAudience(otid, d.visibility, p || audienceEl._proposal || {});
+  } catch (e) { audienceEl.insertAdjacentHTML('beforeend', '<div class="err">' + e + '</div>'); }
+}
+function nodeMarks(d) {
+  const good = new Set(d.good || []), m = {};
+  for (const n of d.nodes) m[n.id] = { kind: n.kind, good: good.has(n.id) };
+  return m;
+}
+function segHtml(s, marks) {
+  const m = marks[s.uuid];
+  let cls = 'u', tag = '';
+  if (m && (m.good || m.kind === 'decision' || m.kind === 'action_item')) {
+    cls += ' mark' + (m.good ? ' good' : '');
+    tag = '<span class="tag">' + (m.good ? '✨ good' : (m.kind === 'action_item' ? '⭐ action' : '⭐ decision')) + '</span>';
+  }
+  return `<p class="${cls}"><span class="spk">${esc(s.speaker)}</span>${esc(s.text)}${tag}</p>`;
+}
+
+// ---------- live conversation (follow in real time) ----------
+function startLive() {
+  meet.innerHTML = '<span class="dot live"></span>following live…';
+  btn.style.display = 'inline-block'; win.style.display = 'inline-block';
+  poll(); pollGraph();
+  timers.push(setInterval(poll, 8000), setInterval(pollGraph, 8000));
+}
 function renderSlides(images, isLive) {
   if (!isLive) { slides.classList.remove('has'); return; }
   slides.classList.add('has');
@@ -115,51 +318,25 @@ function renderSlides(images, isLive) {
   }
   slideCap.textContent = images.length + ' screenshot' + (images.length > 1 ? 's' : '') + ' captured';
 }
-
 async function poll() {
+  if (!cur || !cur.live) return;
   try {
-    const r = await fetch('/live?after=' + after);
-    const d = await r.json();
-    if (d.error) { meet.innerHTML = '<span class="dot"></span>' + d.error; live = false; renderSlides([], false); }
-    else if (!d.live) { meet.innerHTML = '<span class="dot"></span>no live meeting right now'; live = false; renderSlides([], false); }
-    else {
-      live = true;
-      meet.innerHTML = '<span class="dot live"></span>' + (d.title || 'live meeting');
-      for (const s of d.segments) {
-        segs.push(s.text);
-        const p = document.createElement('p'); p.className = 'u'; p.textContent = s.text;
-        feed.appendChild(p);
-      }
-      if (d.segments.length) feed.scrollTop = feed.scrollHeight;
-      after = d.max_order;
-      renderSlides(d.images || [], true);
+    const r = await api('/live?after=' + after); const d = await r.json();
+    if (d.error || !d.live) { meet.innerHTML = '<span class="dot"></span>' + (d.error || 'meeting ended'); renderSlides([], false); return; }
+    meet.innerHTML = '<span class="dot live"></span>' + (d.title || 'live meeting');
+    home.textContent = d.title || 'live meeting';
+    for (const s of d.segments) {
+      segs.push(s.text);
+      feed.insertAdjacentHTML('beforeend', `<p class="u" data-uuid="${esc(s.uuid)}"><span class="spk">${esc(s.speaker)}</span>${esc(s.text)}</p>`);
     }
+    if (d.segments.length) feed.scrollTop = feed.scrollHeight;
+    after = d.max_order;
+    renderSlides(d.images || [], true);
   } catch (e) { meet.innerHTML = '<span class="dot"></span>server unreachable'; }
 }
 
-btn.onclick = async () => {
-  const n = parseInt(win.value, 10);
-  const text = segs.slice(-n).join(' ');
-  if (!text.trim()) { out.innerHTML = '<span class="ph">No transcript captured yet.</span>'; return; }
-  btn.disabled = true; out.innerHTML = '<span class="ph">thinking…</span>';
-  try {
-    const r = await fetch('/recap', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text }) });
-    const d = await r.json();
-    if (d.error) out.innerHTML = '<span class="err">' + d.error + '</span>';
-    else out.innerHTML = '<div class="when">' + new Date().toLocaleTimeString() +
-      (d.used_slide ? ' · read the current slide 🖼️' : '') + '</div>' +
-      d.summary.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  } catch (e) { out.innerHTML = '<span class="err">recap failed: ' + e + '</span>'; }
-  btn.disabled = false;
-};
-
-// --- conversation graph ---
-const dec = document.getElementById('decisions');
-const tabFeed = document.getElementById('tabFeed'), tabGraph = document.getElementById('tabGraph');
-const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+// ---------- graph (shared by live + stored) ----------
 let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastN = -1;
-
 function ensureCy() {
   if (cy) return cy;
   cy = cytoscape({ container: document.getElementById('cy'),
@@ -170,72 +347,99 @@ function ensureCy() {
       { selector: 'node.decision', css: { 'background-color': '#2bb673', 'width': 16, 'height': 16 } },
       { selector: 'node.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 16, 'height': 16 } },
       { selector: 'node.divergence', css: { 'background-color': '#c0524a' } },
+      { selector: 'node.good', css: { 'border-width': 2, 'border-color': '#ff5ea8' } },
       { selector: 'edge', css: { 'width': 1, 'line-color': '#2a2e3b', 'target-arrow-color': '#2a2e3b', 'target-arrow-shape': 'triangle', 'arrow-scale': 0.6, 'curve-style': 'bezier' } },
     ] });
   cy.on('tap', 'node.topic', e => clusterRecap(e.target.id(), e.target.data('label')));
   cy.on('tap', 'node[kind]', e => showNode(e.target.id()));
   return cy;
 }
-
 function renderGraph(d) {
   ensureCy();
+  const good = new Set(d.good || []);
   const els = [];
   for (const t of d.topics) els.push({ data: { id: t.id, label: t.label }, classes: 'topic' });
   let prev = null;
   for (const n of d.nodes) {
-    els.push({ data: { id: n.id, parent: n.topic_id, kind: n.kind, label: n.speaker + ': ' + n.text }, classes: n.kind });
+    els.push({ data: { id: n.id, parent: n.topic_id, kind: n.kind, label: n.speaker + ': ' + n.text }, classes: n.kind + (good.has(n.id) ? ' good' : '') });
     if (prev && n.rel !== 'new-topic') els.push({ data: { id: 'e_' + prev + '_' + n.id, source: prev, target: n.id } });
     prev = n.id;
   }
   cy.json({ elements: els });
   if (d.nodes.length !== lastN) { cy.layout({ name: 'cose', animate: false }).run(); lastN = d.nodes.length; }
 }
-
 function showNode(id) {
   const n = nodeMap[id]; if (!n) return;
   out.innerHTML = '<div class="when">' + n.kind + ' · ' + n.speaker + '</div>' + esc(n.text);
 }
-
 async function clusterRecap(tid, label) {
+  if (viewMode) { out.innerHTML = '<div class="when">topic · ' + esc(label) + '</div><span class="ph">recap is owner-only.</span>'; return; }
   const text = gnodes.filter(n => n.topic_id === tid).map(n => n.speaker + ': ' + n.text).join('\n');
   if (!text) return;
   out.innerHTML = '<span class="ph">thinking…</span>';
   try {
-    const r = await fetch('/recap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, use_slide: false }) });
+    const r = await api('/recap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, use_slide: false }) });
     const j = await r.json();
     out.innerHTML = '<div class="when">cluster · ' + esc(label) + '</div>' + (j.error ? '<span class="err">' + j.error + '</span>' : esc(j.summary));
   } catch (e) { out.innerHTML = '<span class="err">recap failed: ' + e + '</span>'; }
 }
-
 function renderDecisions(d) {
   const set = new Set(d.decisions), good = new Set(d.good || []);
   const ds = d.nodes.filter(n => set.has(n.id) || good.has(n.id));
   dec.innerHTML = ds.length ? ds.map(n => good.has(n.id)
       ? '<p class="d good"><b>✨ good point</b>' + esc(n.speaker + ': ' + n.text) + '</p>'
       : '<p class="d"><b>' + n.kind + '</b>' + esc(n.speaker + ': ' + n.text) + '</p>').join('')
-    : '<span class="ph">decisions &amp; action items collect here.</span>';
+    : '<span class="ph">decisions, action items &amp; good points collect here.</span>';
 }
 
+// party-ball (live only)
 const party = document.getElementById('party');
 let goodSeen = new Set(), partyInit = false;
 function partyBall(ids) {
-  if (!partyInit) { goodSeen = new Set(ids); partyInit = true; return; }  // skip backlog on first load
+  if (!partyInit) { goodSeen = new Set(ids); partyInit = true; return; }
   const fresh = ids.filter(id => !goodSeen.has(id));
   for (const id of ids) goodSeen.add(id);
   if (!fresh.length) return;
   party.classList.remove('go'); void party.offsetWidth; party.classList.add('go');
 }
-
+function markFeed(d) {
+  const marks = nodeMarks(d);
+  for (const p of feed.querySelectorAll('.u[data-uuid]')) {
+    const m = marks[p.dataset.uuid];
+    if (m && (m.good || m.kind === 'decision' || m.kind === 'action_item') && !p.classList.contains('mark')) {
+      p.classList.add('mark'); if (m.good) p.classList.add('good');
+      p.insertAdjacentHTML('beforeend', '<span class="tag">' + (m.good ? '✨ good' : '⭐ ' + m.kind) + '</span>');
+    }
+  }
+}
 async function pollGraph() {
+  if (!cur || !cur.live) return;
   try {
-    const r = await fetch('/graph'); const d = await r.json();
+    const r = await api('/graph'); const d = await r.json();
     if (d.error || !d.live) return;
     gnodes = d.nodes; nodeMap = {}; for (const n of d.nodes) nodeMap[n.id] = n;
-    lastGraph = d; renderDecisions(d); partyBall(d.good || []);
+    lastGraph = d; renderDecisions(d); partyBall(d.good || []); markFeed(d);
     if (graphVisible) renderGraph(d);
   } catch (e) {}
 }
 
+// recap button (live)
+btn.onclick = async () => {
+  const n = parseInt(win.value, 10);
+  const text = segs.slice(-n).join(' ');
+  if (!text.trim()) { out.innerHTML = '<span class="ph">No transcript captured yet.</span>'; return; }
+  btn.disabled = true; out.innerHTML = '<span class="ph">thinking…</span>';
+  try {
+    const r = await api('/recap', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+    const d = await r.json();
+    if (d.error) out.innerHTML = '<span class="err">' + esc(d.error) + '</span>';
+    else out.innerHTML = '<div class="when">' + new Date().toLocaleTimeString() +
+      (d.used_slide ? ' · read the current slide 🖼️' : '') + '</div>' + esc(d.summary);
+  } catch (e) { out.innerHTML = '<span class="err">recap failed: ' + e + '</span>'; }
+  btn.disabled = false;
+};
+
+// tabs
 function switchView(v) {
   graphVisible = v === 'graph';
   feed.style.display = graphVisible ? 'none' : 'block';
@@ -247,8 +451,26 @@ function switchView(v) {
 tabFeed.onclick = () => switchView('feed');
 tabGraph.onclick = () => switchView('graph');
 
-poll(); setInterval(poll, 8000);
-pollGraph(); setInterval(pollGraph, 8000);
+// ---------- boot dispatch ----------
+function publicLanding() {
+  document.title = 'otter copilot';
+  home.textContent = 'otter copilot';
+  listEl.classList.add('show'); mainEl.classList.add('hide');
+  listEl.innerHTML = '<h2>otter copilot</h2><span class="ph">No access. Sign in with an owner link, or open a shared transcript link.</span>';
+}
+function viewLanding() {
+  cur = { otid: viewMode.otid, live: false };
+  listEl.classList.remove('show'); mainEl.classList.remove('hide');
+  back.style.display = 'none'; btn.style.display = 'none'; win.style.display = 'none';
+  home.style.cursor = 'default'; home.onclick = null;
+  meet.innerHTML = '<span class="dot"></span>shared read-only view';
+  switchView('feed');
+  out.innerHTML = '<span class="ph">stored conversation. tap a topic in the graph to view it.</span>';
+  loadStored(viewMode.otid, viewMode.sig);
+}
+if (viewMode) viewLanding();
+else if (ownerToken) loadList();
+else publicLanding();
 </script>
 </body>
 </html>

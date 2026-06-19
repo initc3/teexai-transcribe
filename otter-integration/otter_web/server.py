@@ -10,7 +10,7 @@ it accounts for what's on screen; otherwise a fast text model.
 
   python3 server.py            # serves on http://localhost:8137
 """
-import base64, json, os, re, sys
+import base64, hashlib, hmac, json, os, re, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -29,6 +29,18 @@ VL_MODEL = os.environ.get("NEAR_VL_MODEL", "google/gemini-2.5-flash")
 
 NEAR_KEY = os.environ.get("NEAR_KEY") or os.environ["NEAR_API_KEY"]
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8137")
+
+OWNER_TOKEN = os.environ.get("OWNER_TOKEN")
+if not OWNER_TOKEN:
+    print("WARNING: OWNER_TOKEN unset — auth disabled, everyone treated as owner (local dev only)", file=sys.stderr)
+
+
+def share_sig(otid):
+    return hmac.new(OWNER_TOKEN.encode(), otid.encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def share_url(otid):
+    return f"{BASE_URL}/#view={otid}.{share_sig(otid)}"
 
 DATA = Path(os.environ.get("OTTER_OUT", "/data/otter" if os.path.isdir("/data") else str(HERE / "data")))
 STATE_DIR = DATA / "state"
@@ -168,7 +180,7 @@ def load_state(otid):
         STATE[otid] = d
     else:
         STATE[otid] = {"topics": {}, "tcount": 0, "nodes": [], "done": set(), "announced": set(),
-                       "logged": set(), "started": False}
+                       "logged": set(), "started": False, "meta": {}}
     return STATE[otid]
 
 
@@ -204,6 +216,9 @@ def graph_state():
             for t in sorted(d.get("transcripts") or [], key=lambda x: x.get("order") or 0)
             if (t.get("transcript") or "").strip()]
     st = load_state(otid)
+    st.setdefault("meta", {})
+    st["meta"].setdefault("title", sp.get("title") or "untitled")
+    st["meta"].setdefault("started_at", sp.get("created_at") or sp.get("start_time"))
     append_transcript(otid, rows, st["logged"])
     if not st["started"]:
         st["started"] = True
@@ -239,6 +254,102 @@ def graph_state():
             "decisions": decisions, "good": good}
 
 
+def live_otid():
+    """otid of the currently-live meeting, or None (errors propagate)."""
+    sp = live_speech(otter())
+    return sp["otid"] if sp else None
+
+
+# --- audience proposer: recommend a sharing tier; the owner accepts it (human-in-the-loop) ---
+AUDIENCE_SYS = (
+    "You are an audience proposer for a meeting copilot. Given a conversation's decoded insights and a "
+    "transcript sample, judge who it's fit to share with. Tiers: \"public\" (anyone), \"cohort\" "
+    "(semi-trusted peers), \"private\" (owner only). Be conservative: flag PII, named competitor call-outs, "
+    "confidential, or half-baked/unresolved content as reasons NOT to go public. Return JSON only: "
+    "{\"suggested\":\"private\"|\"cohort\"|\"public\",\"confidence\":<0-1>,\"rationale\":\"1-2 sentences\","
+    "\"redactions\":[\"short note on anything sensitive to strip before sharing\"]}")
+
+
+def propose_audience(otid):
+    st = read_state(otid)
+    if st is None:
+        raise FileNotFoundError(f"no stored conversation {otid}")
+    nodes = st.get("nodes", [])
+    insights = [{"kind": n["kind"], "topic": n.get("topic"), "good": bool(n.get("good")), "text": n["text"]}
+                for n in nodes if n.get("good") or n["kind"] in ("decision", "action_item", "topic")][:40]
+    segs = read_segments(otid)
+    sample = "\n".join(f"[{s['speaker']}] {s['text']}" for s in segs[:60])
+    user = (f"Title: {(st.get('meta') or {}).get('title') or otid}\n\n"
+            f"Decoded insights (decisions / action items / good points / topics):\n{json.dumps(insights)}\n\n"
+            f"Transcript sample (start of meeting):\n{sample}\n\nReturn JSON only.")
+    r = requests.post(NEAR_URL, headers={"Authorization": f"Bearer {NEAR_KEY}", "content-type": "application/json"},
+                      json={"model": TEXT_MODEL, "max_tokens": 400, "temperature": 0.2,
+                            "response_format": {"type": "json_object"},
+                            "messages": [{"role": "system", "content": AUDIENCE_SYS},
+                                         {"role": "user", "content": user}]},
+                      timeout=90)
+    r.raise_for_status()
+    return json.loads(r.json()["choices"][0]["message"]["content"])
+
+
+def set_visibility(otid, visibility):
+    if visibility not in ("private", "cohort", "public"):
+        raise ValueError(f"bad visibility {visibility!r}")
+    st = load_state(otid)
+    st["visibility"] = visibility
+    save_state(otid, st)
+    return visibility
+
+
+def visibility_of(otid):
+    return (read_state(otid) or {}).get("visibility", "private")
+
+
+def read_state(otid):
+    p = STATE_DIR / f"{otid}.json"
+    return json.loads(p.read_text()) if p.exists() else None
+
+
+def read_segments(otid):
+    p = LIVE_DIR / f"{otid}.jsonl"
+    if not p.exists():
+        return []
+    return [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+
+
+def conversations(live):
+    """List every stored conversation from DATA/state + DATA/live, newest first."""
+    otids = {p.stem for p in STATE_DIR.glob("*.json")} | {p.stem for p in LIVE_DIR.glob("*.jsonl")}
+    items = []
+    for otid in otids:
+        st = read_state(otid) or {}
+        nodes = st.get("nodes", [])
+        n_seg = sum(1 for _ in (LIVE_DIR / f"{otid}.jsonl").open()) if (LIVE_DIR / f"{otid}.jsonl").exists() else 0
+        meta = st.get("meta") or {}
+        items.append({
+            "otid": otid, "title": meta.get("title") or otid,
+            "started_at": meta.get("started_at"), "date": meta.get("date"),
+            "visibility": st.get("visibility", "private"),
+            "live": otid == live, "n_segments": n_seg, "n_nodes": len(nodes),
+            "n_decisions": sum(1 for n in nodes if n.get("kind") in ("decision", "action_item")),
+            "n_good": sum(1 for n in nodes if n.get("good"))})
+    items.sort(key=lambda x: (x["live"], x.get("started_at") or x.get("date") or "", x["otid"]), reverse=True)
+    return items
+
+
+def transcript(otid):
+    st = read_state(otid) or {}
+    nodes = st.get("nodes", [])
+    topics = [{"id": tid, "label": lbl, "node_ids": [n["id"] for n in nodes if n["topic_id"] == tid]}
+              for lbl, tid in (st.get("topics") or {}).items()]
+    meta = st.get("meta") or {}
+    return {"otid": otid, "title": meta.get("title") or otid, "segments": read_segments(otid),
+            "visibility": st.get("visibility", "private"),
+            "topics": topics, "nodes": nodes,
+            "decisions": [n["id"] for n in nodes if n["kind"] in ("decision", "action_item")],
+            "good": [n["id"] for n in nodes if n.get("good")]}
+
+
 class H(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         b = body if isinstance(body, bytes) else body.encode()
@@ -248,9 +359,56 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _q(self, key):
+        return parse_qs(urlparse(self.path).query).get(key, [""])[0]
+
+    def _token(self):
+        return self.headers.get("X-Auth-Token") or self._q("token")
+
+    def is_owner(self):
+        if not OWNER_TOKEN:
+            return True
+        t = self._token()
+        return bool(t) and hmac.compare_digest(t, OWNER_TOKEN)
+
+    def share_ok(self, otid):
+        if not OWNER_TOKEN:
+            return True
+        sig = self.headers.get("X-Share-Sig") or self._q("sig")
+        return bool(sig) and hmac.compare_digest(sig, share_sig(otid))
+
     def do_GET(self):
         if self.path == "/" or self.path.startswith("/index"):
             return self._send(200, (HERE / "index.html").read_bytes(), "text/html")
+        if self.path.startswith("/sharelink"):
+            if not self.is_owner():
+                return self._send(401, json.dumps({"error": "owner only"}))
+            otid = self._q("otid")
+            return self._send(200, json.dumps({"otid": otid, "sig": share_sig(otid), "url": share_url(otid)}))
+        if self.path.startswith("/transcript"):
+            otid = self._q("otid")
+            if not (self.is_owner() or self.share_ok(otid) or visibility_of(otid) == "public"):
+                return self._send(401, json.dumps({"error": "unauthorized"}))
+            try:
+                return self._send(200, json.dumps(transcript(otid)))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path.startswith("/conversations"):
+            owner = self.is_owner()
+            try:
+                items = conversations(live_otid())
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+            if not owner:
+                items = [c for c in items if c.get("visibility") == "public"]
+            return self._send(200, json.dumps(items))
+        if not self.is_owner():
+            return self._send(401, json.dumps({"error": "owner only"}))
+        if self.path.startswith("/audience"):
+            try:
+                return self._send(200, json.dumps(propose_audience(self._q("otid"))))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         if self.path.startswith("/live"):
             after = int(re.search(r"after=(\d+)", self.path).group(1)) if "after=" in self.path else 0
             try:
@@ -272,11 +430,19 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, "{}")
 
     def do_POST(self):
+        if not self.is_owner():
+            return self._send(401, json.dumps({"error": "owner only"}))
         n = int(self.headers.get("content-length", 0))
         body = json.loads(self.rfile.read(n) or b"{}")
         if self.path == "/recap":
             try:
                 return self._send(200, json.dumps(recap(body.get("text", ""), body.get("use_slide", True))))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path.startswith("/visibility"):
+            try:
+                v = set_visibility(self._q("otid"), body["visibility"])
+                return self._send(200, json.dumps({"otid": self._q("otid"), "visibility": v}))
             except Exception as e:
                 return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         if self.path == "/recap-matrix":
