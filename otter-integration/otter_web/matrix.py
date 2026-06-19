@@ -1,27 +1,42 @@
 """Post messages to a Matrix room — the one outbound-to-Matrix path.
 
-Creds from env: MATRIX_HOMESERVER (e.g. https://matrix.org), MATRIX_ROOM (!id:server),
-MATRIX_TOKEN (a bot access token). With all three set it posts; with any missing it runs
-in dry-run and logs what it would send — the same chrome|sealed split otter_session.py uses,
-so local self-test (replay) exercises the full path with no creds. Errors propagate.
+The target room is END-TO-END ENCRYPTED, so posts cannot go over plain HTTP — the
+server rejects unencrypted events in an encrypted room. Encryption needs a long-lived
+nio client with a persistent crypto store (megolm sessions, peer device keys), which is
+async and stateful; the synchronous server can't host it. So post() just *enqueues*: it
+drops one JSON file into a spool dir, and a sidecar (matrix_sidecar.py) — the persistent
+E2EE nio client — picks each up in order and room_send()s it, deleting on success. The
+spool dir lives on the persistent /data volume, so messages survive a restart of either
+side and ordering is preserved.
+
+Creds from env: MATRIX_HOMESERVER, MATRIX_ROOM (the ENCRYPTED room id), MATRIX_TOKEN,
+MATRIX_DEVICE_ID (the bot device the token belongs to). With all four set it enqueues;
+with any missing it runs dry-run and just logs — the replay self-test exercises the full
+call path with no creds. Errors propagate (a full disk on enqueue raises, not swallowed).
 """
-import os, time, requests
+import json, os, time
+from pathlib import Path
 
 HS = os.environ.get("MATRIX_HOMESERVER")
 ROOM = os.environ.get("MATRIX_ROOM")
 TOKEN = os.environ.get("MATRIX_TOKEN")
-LIVE = bool(HS and ROOM and TOKEN)
+DEVICE_ID = os.environ.get("MATRIX_DEVICE_ID")
+LIVE = bool(HS and ROOM and TOKEN and DEVICE_ID)
+
+SPOOL = Path(os.environ.get("MATRIX_SPOOL", "/data/matrix_spool" if os.path.isdir("/data") else
+                            str(Path(__file__).parent / "matrix_spool")))
 
 
 def post(body, html=None):
     if not LIVE:
         print(f"[matrix dry-run] {body}", flush=True)
         return
-    txn = str(time.time_ns())
-    url = f"{HS}/_matrix/client/v3/rooms/{ROOM}/send/m.room.message/{txn}"
+    SPOOL.mkdir(parents=True, exist_ok=True)
     msg = {"msgtype": "m.notice", "body": body}
     if html:
         msg.update({"format": "org.matrix.custom.html", "formatted_body": html})
-    r = requests.put(url, headers={"Authorization": f"Bearer {TOKEN}"}, json=msg, timeout=20)
-    r.raise_for_status()
-    return r.json()
+    # monotonic, sortable, unique filename; .tmp+rename so the sidecar never reads a partial write
+    name = f"{time.time_ns()}.json"
+    tmp = SPOOL / (name + ".tmp")
+    tmp.write_text(json.dumps(msg))
+    tmp.rename(SPOOL / name)

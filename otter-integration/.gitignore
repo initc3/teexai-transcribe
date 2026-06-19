@@ -8,3 +8,5 @@ otter_capture.*
 .env
 .env.local
 *.token
+matrix_spool/
+nio_store/

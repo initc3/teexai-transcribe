@@ -12,6 +12,7 @@ services:
       - MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
       - MATRIX_ROOM=${MATRIX_ROOM}
       - MATRIX_TOKEN=${MATRIX_TOKEN}
+      - MATRIX_DEVICE_ID=${MATRIX_DEVICE_ID}
       - HOST=0.0.0.0
       - OTTER_OUT=/data/otter
     volumes:
