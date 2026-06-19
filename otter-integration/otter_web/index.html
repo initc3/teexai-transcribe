@@ -150,11 +150,15 @@ let ownerToken = null, viewMode = null;  // viewMode = {otid, sig}
   }
   if (h) history.replaceState(null, '', location.pathname + location.search);
 })();
+// the app may be mounted under a prefix on the CVM (e.g. /otter/), so resolve API/asset
+// paths relative to the page dir instead of the server root.
+const API_BASE = location.pathname.replace(/[^/]*$/, '');
+function apiUrl(path) { return API_BASE + String(path).replace(/^\//, ''); }
 function api(path, opts) {
   opts = opts || {};
   const headers = Object.assign({}, opts.headers);
   if (ownerToken) headers['X-Auth-Token'] = ownerToken;
-  return fetch(path, Object.assign({}, opts, { headers }));
+  return fetch(apiUrl(path), Object.assign({}, opts, { headers }));
 }
 
 const listEl = document.getElementById('list'), mainEl = document.querySelector('.main');
@@ -309,11 +313,11 @@ function renderSlides(images, isLive) {
   }
   slideBig.style.display = 'block';
   const newest = images[images.length - 1].src;
-  if (newest !== lastSlide) { slideBig.src = newest; lastSlide = newest; }
+  if (newest !== lastSlide) { slideBig.src = apiUrl(newest); lastSlide = newest; }
   slideRow.innerHTML = '';
   for (const im of images.slice().reverse()) {
-    const t = document.createElement('img'); t.src = im.src;
-    t.onclick = () => { slideBig.src = im.src; };
+    const t = document.createElement('img'); t.src = apiUrl(im.src);
+    t.onclick = () => { slideBig.src = apiUrl(im.src); };
     slideRow.appendChild(t);
   }
   slideCap.textContent = images.length + ' screenshot' + (images.length > 1 ? 's' : '') + ' captured';
