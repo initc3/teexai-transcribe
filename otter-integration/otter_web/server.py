@@ -275,6 +275,82 @@ def live_otid():
     return sp["otid"] if sp else None
 
 
+# --- owner backfill: decode the user's EXISTING Otter meetings into the same graph state ---
+import threading
+BACKFILL = {"running": False, "done": 0, "total": 0, "current": None, "errors": []}
+
+
+def _decode_segments(otid, rows, st):
+    """Run graph_state's decode loop over ALL of `rows` in DECODE_MAX chunks (no Matrix)."""
+    append_transcript(otid, rows, st["logged"])
+    while True:
+        new = [r for r in rows if r["uuid"] not in st["done"]][:DECODE_MAX]
+        if len(new) < DECODE_BATCH:
+            break
+        for nd in decode(list(st["topics"]), new):
+            i = nd.get("i")
+            if not isinstance(i, int) or i >= len(new):
+                continue
+            label = nd.get("topic") or "misc"
+            if label not in st["topics"]:
+                st["tcount"] += 1
+                st["topics"][label] = f"t{st['tcount']}"
+            st["nodes"].append({"id": new[i]["uuid"], "speaker": new[i]["speaker"], "kind": nd.get("kind", "point"),
+                                "text": nd.get("text") or new[i]["text"], "topic_id": st["topics"][label],
+                                "topic": label, "rel": nd.get("rel", "continues"), "good": bool(nd.get("good"))})
+        for r in new:
+            st["done"].add(r["uuid"])
+        save_state(otid, st)
+    save_state(otid, st)
+
+
+def _past_speeches(s, limit):
+    speeches = []
+    for source in ("owned", "shared"):
+        speeches += s.get(OTTER + "speeches", params={"userid": s.uid, "page_size": 60, "source": source},
+                          timeout=40).json().get("speeches", [])
+    speeches = [x for x in speeches if x.get("live_status") != "live"]
+    speeches.sort(key=lambda x: x.get("created_at") or x.get("start_time") or 0, reverse=True)
+    todo = [x for x in speeches if not (STATE_DIR / f"{x['otid']}.json").exists()]
+    return todo[:limit]
+
+
+def backfill(limit=12, todo=None):
+    s = otter()
+    if todo is None:
+        todo = _past_speeches(s, limit)
+    BACKFILL.update(running=True, done=0, total=len(todo), current=None, errors=[])
+    for sp in todo:
+        otid = sp["otid"]
+        BACKFILL["current"] = sp.get("title") or otid
+        try:
+            d = s.get(OTTER + "speech", params={"userid": s.uid, "otid": otid}, timeout=60).json()["speech"]
+            rows = [{"uuid": t.get("uuid"), "speaker": f"S{t.get('label')}", "text": (t.get("transcript") or "").strip(),
+                     "order": t.get("order") or 0}
+                    for t in sorted(d.get("transcripts") or [], key=lambda x: x.get("order") or 0)
+                    if (t.get("transcript") or "").strip()]
+            st = load_state(otid)
+            st.setdefault("meta", {})
+            st["meta"]["title"] = d.get("title") or sp.get("title") or otid
+            ts = d.get("start_time") or d.get("created_at") or sp.get("created_at")
+            st["meta"]["started_at"] = time.strftime("%Y-%m-%d", time.localtime(ts)) if isinstance(ts, (int, float)) else ts
+            st["started"] = True  # don't let a later live view re-announce a backfilled meeting
+            _decode_segments(otid, rows, st)
+        except Exception as e:
+            BACKFILL["errors"].append({"otid": otid, "title": sp.get("title"), "error": f"{type(e).__name__}: {e}"})
+        BACKFILL["done"] += 1
+    BACKFILL.update(running=False, current=None)
+
+
+def start_backfill(limit=12):
+    if BACKFILL["running"]:
+        return {"started": False, "total": BACKFILL["total"]}
+    todo = _past_speeches(otter(), limit)
+    BACKFILL.update(running=True, done=0, total=len(todo), current=None, errors=[])
+    threading.Thread(target=lambda: backfill(limit, todo), daemon=True).start()
+    return {"started": True, "total": len(todo)}
+
+
 # --- audience proposer: recommend a sharing tier; the owner accepts it (human-in-the-loop) ---
 AUDIENCE_SYS = (
     "You are an audience proposer for a meeting copilot. Given a conversation's decoded insights and a "
@@ -423,6 +499,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(items))
         if not self.is_owner():
             return self._send(401, json.dumps({"error": "owner only"}))
+        if self.path.startswith("/backfill/status"):
+            return self._send(200, json.dumps(BACKFILL))
         if self.path.startswith("/audience"):
             try:
                 return self._send(200, json.dumps(propose_audience(self._q("otid"))))
@@ -462,6 +540,12 @@ class H(BaseHTTPRequestHandler):
             try:
                 v = set_visibility(self._q("otid"), body["visibility"])
                 return self._send(200, json.dumps({"otid": self._q("otid"), "visibility": v}))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path.startswith("/backfill"):
+            try:
+                limit = int(self._q("limit") or 12)
+                return self._send(200, json.dumps(start_backfill(limit)))
             except Exception as e:
                 return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         if self.path == "/recap-matrix":

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>otter — conversations</title>
+<title>Otter Copilot</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body { margin: 0; font: 15px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
          background: #0b0c10; color: #d7dae0; display: flex; flex-direction: column; height: 100vh; }
-  header { padding: 12px 18px; border-bottom: 1px solid #1e2029; display: flex; gap: 12px; align-items: center; }
+  header { padding: 12px 18px; border-bottom: 1px solid #1e2029; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   header b { color: #8ad; font-size: 16px; cursor: pointer; }
   header .meet { color: #6b7080; font-size: 13px; margin-right: auto; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: #2a2e3b; display: inline-block; margin-right: 6px; vertical-align: -1px; }
@@ -21,10 +21,37 @@
   select { background: #15171f; border: 1px solid #2a2e3b; color: #cdd2da; border-radius: 6px; padding: 8px; font: inherit; }
   #back { background: #15171f; color: #9aa0ad; font-size: 13px; display: none; }
 
+  /* intro + identity strip (always visible) */
+  #intro { padding: 14px 24px 4px; border-bottom: 1px solid #16181f; }
+  #intro .lead { color: #c3c8d2; font-size: 13.5px; max-width: 880px; }
+  #intro .lead b { color: #8ad; }
+  #intro .idrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; }
+  .badge2 { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; letter-spacing: .04em; }
+  .badge2.owner { background: #0c2c1a; color: #2eea7e; }
+  .badge2.shared { background: #1a2330; color: #6fb0e8; }
+  .badge2.guest { background: #2a1a1a; color: #e08a8a; }
+  #ownerLink { display: flex; gap: 6px; align-items: center; background: #12141c; border: 1px solid #1e2029; border-radius: 7px; padding: 4px 6px 4px 10px; max-width: 100%; }
+  #ownerLink code { color: #9aa0ad; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }
+  #ownerLink button, #liveBar button, .smallbtn { background: #1f2330; color: #9aa0ad; font-size: 11px; font-weight: 600; padding: 4px 10px; }
+  #ownerLink button:hover, .smallbtn:hover { color: #cdd2da; }
+  #helpToggle { background: none; color: #6fb0e8; padding: 0; font-size: 12px; font-weight: 600; text-decoration: underline; }
+  #help { display: none; margin-top: 10px; background: #0e1017; border: 1px solid #1e2029; border-radius: 8px; padding: 12px 16px; font-size: 12.5px; color: #aeb4c0; max-width: 880px; }
+  #help.show { display: block; }
+  #help h4 { margin: 10px 0 4px; color: #c9a227; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  #help h4:first-child { margin-top: 0; }
+  #help b { color: #cdd2da; }
+  #help ul { margin: 4px 0; padding-left: 18px; }
+
+  /* live indicator on the list */
+  #liveBar { margin: 14px 24px 0; padding: 11px 15px; border-radius: 9px; border: 1px solid #1e2029; background: #10131b; font-size: 13px; color: #9aa0ad; display: none; }
+  #liveBar.show { display: flex; align-items: center; gap: 10px; }
+  #liveBar.islive { border-color: #195232; background: #0c1a12; color: #d7f0e1; cursor: pointer; }
+  #liveBar.islive:hover { border-color: #2b6; }
+
   /* conversations list */
-  #list { flex: 1; overflow-y: auto; padding: 20px 24px; display: none; }
+  #list { flex: 1; overflow-y: auto; padding: 8px 24px 20px; display: none; }
   #list.show { display: block; }
-  #list h2 { color: #c9a227; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 14px; }
+  #list h2 { color: #c9a227; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin: 18px 0 14px; }
   .card { background: #12141c; border: 1px solid #1e2029; border-radius: 9px; padding: 14px 16px; margin: 0 0 10px; cursor: pointer; transition: border-color .12s; }
   .card:hover { border-color: #3a4150; }
   .card .t { font-size: 15px; color: #e6e9ef; display: flex; align-items: center; gap: 8px; }
@@ -36,6 +63,24 @@
   .card .meta .pill.good b { color: #ff5ea8; }
   .badge { background: #143; color: #2b6; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; letter-spacing: .05em; }
   .badge.live { background: #0c2c1a; color: #2eea7e; }
+
+  /* big explanatory panels (empty / guest states) */
+  .panel { background: #10131b; border: 1px solid #1e2029; border-radius: 11px; padding: 22px 24px; max-width: 640px; margin: 8px 0 18px; }
+  .panel h3 { margin: 0 0 8px; color: #e6e9ef; font-size: 16px; }
+  .panel p { color: #aeb4c0; font-size: 13.5px; margin: 0 0 12px; }
+  .panel .big { background: #c9a227; color: #1a1500; font-size: 14px; }
+  .panel .big:disabled { opacity: .5; cursor: default; }
+  .panel input { background: #15171f; border: 1px solid #2a2e3b; color: #cdd2da; border-radius: 7px; padding: 9px 11px; font: inherit; font-size: 13px; width: 280px; max-width: 60%; }
+  .panel .signin { background: #1f2a3a; color: #cfe2f7; }
+  .panel .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .progress { margin-top: 12px; font-size: 13px; color: #9aa0ad; }
+  .progress .barwrap { height: 6px; background: #1e2029; border-radius: 4px; margin-top: 7px; overflow: hidden; }
+  .progress .bar { height: 100%; background: #2bb673; width: 0; transition: width .3s; }
+  .progress .errs { color: #d09a4a; font-size: 12px; margin-top: 6px; }
+
+  /* shared read-only banner */
+  #sharedBanner { display: none; margin: 0; padding: 9px 24px; background: #11161f; border-bottom: 1px solid #1c2734; color: #9fc0e0; font-size: 12.5px; }
+  #sharedBanner.show { display: block; }
 
   /* conversation view */
   .main { flex: 1; display: grid; grid-template-columns: 1fr 420px; min-height: 0; }
@@ -73,6 +118,7 @@
   #out .ph { color: #5f6470; }
   #out .when { color: #6b7080; font-size: 11px; margin-bottom: 10px; }
   .err { color: #c0524a; }
+  .ph { color: #5f6470; }
   .left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #1e2029; }
   .tabs { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #16181f; }
   .tab { background: #15171f; color: #9aa0ad; font-weight: 600; padding: 6px 12px; font-size: 13px; }
@@ -94,9 +140,10 @@
 </head>
 <body>
 <header>
-  <b id="home">otter conversations</b>
+  <b id="home">Otter Copilot</b>
   <span class="meet" id="meet"></span>
   <button id="back">← all conversations</button>
+  <button id="hdrImport" class="smallbtn" style="display:none">⬇ import past meetings</button>
   <select id="win" title="how far back to recap" style="display:none">
     <option value="40">last bit</option>
     <option value="120" selected>~last few min</option>
@@ -104,6 +151,47 @@
   </select>
   <button id="recap" style="display:none">what were we talking about?</button>
 </header>
+
+<!-- always-visible intro + identity strip -->
+<div id="intro">
+  <div class="lead">
+    <b>Otter Copilot</b> watches your live Otter meetings, builds a topic graph, flags decisions and
+    good points, can post recaps to your Matrix room, and keeps your past transcripts here.
+  </div>
+  <div class="idrow">
+    <span id="whoami"></span>
+    <div id="ownerLink" style="display:none">
+      <span style="color:#6b7080">your owner link:</span>
+      <code id="ownerLinkText"></code>
+      <button id="copyOwner">copy</button>
+    </div>
+    <button id="helpToggle">how it works / help</button>
+  </div>
+  <div id="help">
+    <h4>What you're looking at</h4>
+    <div>Each meeting becomes a transcript plus a live <b>topic graph</b>. Green nodes are decisions and
+      action items; pink-bordered nodes are "good points". Click a topic to get a one-paragraph recap.</div>
+    <h4>Who can see what (three access tiers)</h4>
+    <ul>
+      <li><b>Owner</b> — you, holding the owner token. You see every meeting (live and past) and all controls.</li>
+      <li><b>Shared transcript link</b> — a single read-only transcript you hand out. No token, no other meetings.</li>
+      <li><b>Public / guest</b> — anyone with the URL. Sees only meetings you've explicitly marked public.</li>
+    </ul>
+    <h4>Your owner token is your key</h4>
+    <div>There's no password. The token in your owner link <b>is</b> your sign-in. Bookmark your owner link
+      (shown above) so you can get back in. Anyone with that link becomes owner, so keep it private.</div>
+    <h4>Sharing a single meeting</h4>
+    <div>Open a meeting and press <b>share</b> to copy a read-only link to that one transcript. Use the
+      <b>audience</b> card to mark a meeting private / cohort / public.</div>
+  </div>
+</div>
+
+<!-- live indicator (owner, list view) -->
+<div id="liveBar"></div>
+
+<!-- shared read-only banner -->
+<div id="sharedBanner">📄 Shared read-only transcript. You're viewing a single meeting that the owner shared with you — owner controls are hidden.</div>
+
 <div id="party"><span class="ball">🎉</span><span class="txt">good point!</span></div>
 
 <div id="list" class="show"></div>
@@ -123,8 +211,8 @@
       <div class="row" id="slideRow"></div>
       <div class="cap" id="slideCap"></div>
     </div>
-    <h3>audience</h3>
-    <div id="audience"><span class="ph">who is this fit to share with? propose &amp; accept.</span></div>
+    <h3>audience — who is this fit to share with?</h3>
+    <div id="audience"><span class="ph">proposes a sharing tier (private / cohort / public). You accept.</span></div>
     <h3>decisions &amp; good points</h3>
     <div id="decisions"><span class="ph">decisions, action items &amp; good points collect here.</span></div>
     <h3>recap</h3>
@@ -169,37 +257,148 @@ const slides = document.getElementById('slides'), slideBig = document.getElement
 const slideRow = document.getElementById('slideRow'), slideCap = document.getElementById('slideCap');
 const dec = document.getElementById('decisions');
 const tabFeed = document.getElementById('tabFeed'), tabGraph = document.getElementById('tabGraph');
+const liveBar = document.getElementById('liveBar'), hdrImport = document.getElementById('hdrImport');
+
+// ---------- identity strip (always rendered) ----------
+function renderIdentity() {
+  const who = document.getElementById('whoami');
+  const linkWrap = document.getElementById('ownerLink');
+  document.getElementById('helpToggle').onclick = () => document.getElementById('help').classList.toggle('show');
+  document.getElementById('copyOwner').onclick = () => {
+    navigator.clipboard.writeText(ownerLinkUrl());
+    const b = document.getElementById('copyOwner'); b.textContent = 'copied!'; setTimeout(() => b.textContent = 'copy', 1500);
+  };
+  if (viewMode) {
+    who.innerHTML = '<span class="badge2 shared">shared transcript</span> <span style="color:#6b7080">read-only single meeting</span>';
+    linkWrap.style.display = 'none';
+  } else if (ownerToken) {
+    who.innerHTML = '<span class="badge2 owner">✓ signed in as owner</span>';
+    document.getElementById('ownerLinkText').textContent = ownerLinkUrl();
+    linkWrap.style.display = 'flex';
+  } else {
+    who.innerHTML = '<span class="badge2 guest">guest / public</span> <span style="color:#6b7080">not signed in</span>';
+    linkWrap.style.display = 'none';
+  }
+}
+function ownerLinkUrl() { return location.origin + API_BASE + '#owner=' + ownerToken; }
 
 // view: 'list' or otid; cur = {otid, live}
 let cur = null, after = 0, segs = [], lastSlide = '';
 let timers = [];
 function clearTimers() { timers.forEach(clearInterval); timers = []; }
 
+// ---------- live indicator (owner, while on the list) ----------
+async function pollLive() {
+  if (cur || viewMode || !ownerToken) return;
+  liveBar.classList.add('show');
+  try {
+    const r = await api('/live?after=0'); const d = await r.json();
+    if (d.error) { liveBar.className = 'show'; liveBar.textContent = '⚠ ' + d.error; return; }
+    if (d.live) {
+      liveBar.className = 'show islive';
+      liveBar.innerHTML = '<span class="dot live"></span><b style="color:#2eea7e">● LIVE: ' +
+        esc(d.title || 'meeting') + '</b> <span style="color:#9fc8ac">— click to follow</span>';
+      liveBar.dataset.otid = d.otid || '';
+      liveBar.onclick = () => open(d.otid, true);
+    } else {
+      liveBar.className = 'show'; liveBar.onclick = null;
+      liveBar.innerHTML = '<span class="dot"></span>No live meeting right now. Start an Otter and it appears ' +
+        'here automatically (usually within a few seconds).';
+    }
+  } catch (e) { liveBar.className = 'show'; liveBar.textContent = 'live check failed: ' + e; }
+}
+
+// ---------- backfill (import past Otter meetings) ----------
+let backfillTimer = null;
+async function startBackfill(progressEl) {
+  if (progressEl) progressEl.innerHTML = '<span class="ph">starting import…</span>';
+  try {
+    const r = await api('/backfill?limit=12', { method: 'POST' }); const d = await r.json();
+    if (d.error) { if (progressEl) progressEl.innerHTML = '<span class="err">' + esc(d.error) + '</span>'; return; }
+    pollBackfill(progressEl);
+  } catch (e) { if (progressEl) progressEl.innerHTML = '<span class="err">import failed: ' + e + '</span>'; }
+}
+function renderBackfill(d, progressEl) {
+  if (!progressEl) return;
+  const pct = d.total ? Math.round(100 * d.done / d.total) : 0;
+  let h = '';
+  if (d.running) h += 'Importing ' + d.done + '/' + d.total + (d.current ? ': ' + esc(d.current) + '…' : '…');
+  else if (d.total) h += '✓ Imported ' + d.done + '/' + d.total + ' meetings.';
+  else h += 'Nothing new to import — every past Otter meeting is already here.';
+  h += '<div class="barwrap"><div class="bar" style="width:' + pct + '%"></div></div>';
+  if ((d.errors || []).length) h += '<div class="errs">' + d.errors.length + ' failed: ' +
+    d.errors.map(e => esc(e.title || e.otid) + ' (' + esc(e.error) + ')').join('; ') + '</div>';
+  progressEl.innerHTML = h;
+}
+async function pollBackfill(progressEl) {
+  clearInterval(backfillTimer);
+  const tick = async () => {
+    try {
+      const r = await api('/backfill/status'); const d = await r.json();
+      renderBackfill(d, progressEl);
+      if (!d.running) { clearInterval(backfillTimer); backfillTimer = null; if (!cur && ownerToken) loadList(); }
+    } catch (e) {}
+  };
+  await tick();
+  backfillTimer = setInterval(tick, 1500);
+}
+hdrImport.onclick = () => {
+  loadList();  // make sure we're on the list, where the progress area lives
+  setTimeout(() => {
+    let pe = document.getElementById('hdrImportProgress');
+    if (!pe) { pe = document.createElement('div'); pe.id = 'hdrImportProgress'; pe.className = 'progress';
+      pe.style.margin = '10px 24px 0'; liveBar.after(pe); }
+    startBackfill(pe);
+  }, 50);
+};
+
 // ---------- conversations list ----------
 async function loadList() {
   cur = null; clearTimers();
   listEl.classList.add('show'); mainEl.classList.add('hide');
   back.style.display = 'none'; btn.style.display = 'none'; win.style.display = 'none'; meet.textContent = '';
-  home.textContent = 'otter conversations';
+  home.textContent = 'Otter Copilot';
+  hdrImport.style.display = ownerToken && !viewMode ? 'inline-block' : 'none';
+  listEl.innerHTML = '<p class="ph" style="padding-top:14px">Loading your conversations… checking for a live meeting…</p>';
+  pollLive();
+  timers.push(setInterval(pollLive, 8000));
   const r = await api('/conversations'); const d = await r.json();
-  if (d.error) { listEl.innerHTML = '<span class="err">' + esc(d.error) + '</span>'; return; }
+  if (cur) return;  // navigated away while loading
+  if (d.error) { listEl.innerHTML = '<p class="err" style="padding-top:14px">Couldn\'t load conversations: ' + esc(d.error) + '</p>'; return; }
   const live = d.filter(c => c.live), past = d.filter(c => !c.live);
   let html = '';
   if (live.length) html += '<h2>live now</h2>' + live.map(card).join('');
-  html += '<h2>past conversations</h2>' + (past.length ? past.map(card).join('') : '<span class="ph">none stored yet.</span>');
+  if (!past.length && !live.length) {
+    html += emptyOwnerPanel();
+  } else {
+    html += '<h2>past conversations</h2>' + (past.length ? past.map(card).join('') : '<span class="ph">none stored yet.</span>');
+  }
   listEl.innerHTML = html;
+  wireCards();
+  const imp = document.getElementById('emptyImport');
+  if (imp) imp.onclick = () => { imp.disabled = true; startBackfill(document.getElementById('emptyProgress')); };
+  timers.push(setInterval(() => { if (!cur) loadList(); }, 12000));  // auto-refresh so a newly-started meeting shows up
+}
+function emptyOwnerPanel() {
+  return '<div class="panel"><h3>No conversations yet</h3>' +
+    '<p>This copilot fills up two ways: (1) start an Otter meeting and it appears here live automatically, or ' +
+    '(2) import the meetings already in your Otter account.</p>' +
+    '<div class="row"><button id="emptyImport" class="big">⬇ Import my past Otter meetings</button></div>' +
+    '<div id="emptyProgress" class="progress"></div></div>';
+}
+function wireCards() {
   for (const el of listEl.querySelectorAll('.card')) el.onclick = e => {
     if (e.target.classList.contains('share')) return;
     open(el.dataset.otid, el.dataset.live === '1');
   };
   for (const s of listEl.querySelectorAll('.share')) s.onclick = ev => { ev.stopPropagation(); shareLink(s.dataset.otid, s); };
-  timers.push(setInterval(() => { if (!cur) loadList(); }, 10000));  // auto-refresh so a newly-started meeting shows up
 }
 function card(c) {
   const badge = c.live ? '<span class="badge live">● LIVE</span>' : '';
   const when = c.started_at || c.date || '';
+  const shareBtn = viewMode ? '' : `<button class="share" data-otid="${esc(c.otid)}">share</button>`;
   return `<div class="card" data-otid="${esc(c.otid)}" data-live="${c.live ? 1 : 0}">
-    <div class="t">${esc(c.title)} ${badge}<button class="share" data-otid="${esc(c.otid)}">share</button></div>
+    <div class="t">${esc(c.title)} ${badge}${shareBtn}</div>
     <div class="meta">${when ? '<span class="pill">' + esc(when) + '</span>' : ''}
       <span class="pill"><b>${c.n_segments}</b> segments</span>
       <span class="pill"><b>${c.n_decisions}</b> decisions</span>
@@ -216,16 +415,17 @@ async function shareLink(otid, el) {
 function open(otid, live) {
   cur = { otid, live }; clearTimers();
   listEl.classList.remove('show'); mainEl.classList.remove('hide');
-  back.style.display = 'inline-block';
-  after = 0; segs = []; lastSlide = ''; feed.innerHTML = ''; lastN = -1; gnodes = []; nodeMap = {};
+  liveBar.classList.remove('show');
+  back.style.display = viewMode ? 'none' : 'inline-block';
+  after = 0; segs = []; lastSlide = ''; feed.innerHTML = '<span class="ph">loading transcript…</span>'; lastN = -1; gnodes = []; nodeMap = {};
   partyInit = false; goodSeen = new Set();
   out.innerHTML = '<span class="ph">loading…</span>';
-  document.getElementById('audience').innerHTML = '<span class="ph">who is this fit to share with? propose &amp; accept.</span>';
+  document.getElementById('audience').innerHTML = '<span class="ph">proposing a sharing tier…</span>';
   switchView('feed');
   if (live) startLive(); else loadStored(otid);
 }
 back.onclick = loadList;
-home.onclick = loadList;
+home.onclick = () => { if (!viewMode) loadList(); };
 
 // ---------- stored (past) conversation ----------
 async function loadStored(otid, sig) {
@@ -240,7 +440,7 @@ async function loadStored(otid, sig) {
   feed.innerHTML = d.segments.map(s => segHtml(s, marks)).join('') || '<span class="ph">no transcript stored.</span>';
   renderDecisions(d); lastGraph = d;
   gnodes = d.nodes; nodeMap = {}; for (const n of d.nodes) nodeMap[n.id] = n;
-  out.innerHTML = '<span class="ph">stored conversation. tap a topic in the graph to recap it.</span>';
+  out.innerHTML = '<span class="ph">Stored conversation. Open the graph tab and tap a topic to recap it.</span>';
   initAudience(otid, d.visibility);
 }
 
@@ -265,7 +465,7 @@ function renderAudience(otid, current, p) {
 async function initAudience(otid, current) {
   if (viewMode) { audienceEl.style.display = 'none'; return; }  // owner-only card
   audienceEl.style.display = 'block';
-  audienceEl.innerHTML = '<span class="ph">proposing audience…</span>';
+  audienceEl.innerHTML = '<span class="ph">proposing a sharing tier…</span>';
   try {
     const r = await api('/audience?otid=' + encodeURIComponent(otid)); const p = await r.json();
     if (p.error) { audienceEl.innerHTML = '<span class="err">' + esc(p.error) + '</span>'; return; }
@@ -300,6 +500,7 @@ function segHtml(s, marks) {
 // ---------- live conversation (follow in real time) ----------
 function startLive() {
   meet.innerHTML = '<span class="dot live"></span>following live…';
+  feed.innerHTML = '<span class="ph">Following the live meeting… new lines stream in as people speak.</span>';
   btn.style.display = 'inline-block'; win.style.display = 'inline-block';
   poll(); pollGraph();
   timers.push(setInterval(poll, 8000), setInterval(pollGraph, 8000));
@@ -378,7 +579,7 @@ function showNode(id) {
   out.innerHTML = '<div class="when">' + n.kind + ' · ' + n.speaker + '</div>' + esc(n.text);
 }
 async function clusterRecap(tid, label) {
-  if (viewMode) { out.innerHTML = '<div class="when">topic · ' + esc(label) + '</div><span class="ph">recap is owner-only.</span>'; return; }
+  if (viewMode) { out.innerHTML = '<div class="when">topic · ' + esc(label) + '</div><span class="ph">Recap is owner-only. This is a shared read-only transcript.</span>'; return; }
   const text = gnodes.filter(n => n.topic_id === tid).map(n => n.speaker + ': ' + n.text).join('\n');
   if (!text) return;
   out.innerHTML = '<span class="ph">thinking…</span>';
@@ -456,26 +657,62 @@ function switchView(v) {
 tabFeed.onclick = () => switchView('feed');
 tabGraph.onclick = () => switchView('graph');
 
-// ---------- boot dispatch ----------
-function publicLanding() {
-  document.title = 'otter copilot';
-  home.textContent = 'otter copilot';
+// ---------- guest / public landing ----------
+function guestLanding() {
+  document.title = 'Otter Copilot';
+  home.textContent = 'Otter Copilot';
+  hdrImport.style.display = 'none';
   listEl.classList.add('show'); mainEl.classList.add('hide');
-  listEl.innerHTML = '<h2>otter copilot</h2><span class="ph">No access. Sign in with an owner link, or open a shared transcript link.</span>';
+  liveBar.classList.remove('show');
+  listEl.innerHTML = guestPanel();
+  // public conversations (visibility==public) still load, so guests can browse them
+  api('/conversations').then(r => r.json()).then(d => {
+    if (Array.isArray(d) && d.length) {
+      listEl.insertAdjacentHTML('beforeend', '<h2>public conversations</h2>' + d.map(card).join(''));
+      wireCards();
+    }
+  }).catch(() => {});
+  document.getElementById('guestSignin').onclick = doSignin;
+  document.getElementById('guestToken').addEventListener('keydown', e => { if (e.key === 'Enter') doSignin(); });
 }
+function guestPanel() {
+  return '<div class="panel"><h3>You\'re viewing as a guest</h3>' +
+    '<p>This is the owner\'s private meeting copilot. Guests only see meetings the owner has explicitly ' +
+    'marked <b>public</b>. A single meeting can also be shared with you via a special read-only link.</p>' +
+    '<p>If you\'re the owner, paste your owner token to sign in:</p>' +
+    '<div class="row"><input id="guestToken" type="password" placeholder="owner token" autocomplete="off" />' +
+    '<button id="guestSignin" class="signin">Sign in</button></div>' +
+    '<p style="margin-top:12px;font-size:12.5px;color:#6b7080">Tip: your owner link bookmarks the token for you ' +
+    '(it ends in <code style="color:#9aa0ad">#owner=…</code>), so you usually won\'t need to type it again.</p></div>';
+}
+function doSignin() {
+  const t = document.getElementById('guestToken').value.trim();
+  if (!t) return;
+  localStorage.setItem('otter_owner_token', t);
+  location.hash = '#owner=' + encodeURIComponent(t);
+  location.reload();
+}
+
+// ---------- shared read-only view ----------
 function viewLanding() {
+  document.getElementById('sharedBanner').classList.add('show');
   cur = { otid: viewMode.otid, live: false };
   listEl.classList.remove('show'); mainEl.classList.remove('hide');
-  back.style.display = 'none'; btn.style.display = 'none'; win.style.display = 'none';
+  liveBar.classList.remove('show');
+  back.style.display = 'none'; btn.style.display = 'none'; win.style.display = 'none'; hdrImport.style.display = 'none';
   home.style.cursor = 'default'; home.onclick = null;
   meet.innerHTML = '<span class="dot"></span>shared read-only view';
+  feed.innerHTML = '<span class="ph">loading shared transcript…</span>';
   switchView('feed');
-  out.innerHTML = '<span class="ph">stored conversation. tap a topic in the graph to view it.</span>';
+  out.innerHTML = '<span class="ph">Shared conversation. Open the graph tab and tap a topic to view it.</span>';
   loadStored(viewMode.otid, viewMode.sig);
 }
+
+// ---------- boot dispatch ----------
+renderIdentity();
 if (viewMode) viewLanding();
 else if (ownerToken) loadList();
-else publicLanding();
+else guestLanding();
 </script>
 </body>
 </html>
