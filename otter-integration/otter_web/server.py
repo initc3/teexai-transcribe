@@ -233,7 +233,8 @@ def graph_state():
     st = load_state(otid)
     st.setdefault("meta", {})
     st["meta"].setdefault("title", sp.get("title") or "untitled")
-    st["meta"].setdefault("started_at", sp.get("created_at") or sp.get("start_time"))
+    _sa = sp.get("created_at") or sp.get("start_time")
+    st["meta"].setdefault("started_at", time.strftime("%Y-%m-%d", time.localtime(_sa)) if isinstance(_sa, (int, float)) else _sa)
     append_transcript(otid, rows, st["logged"])
     if not st["started"]:
         st["started"] = True
@@ -428,7 +429,7 @@ def conversations(live_sp):
             "live": otid == live, "n_segments": n_seg, "n_nodes": len(nodes),
             "n_decisions": sum(1 for n in nodes if n.get("kind") in ("decision", "action_item")),
             "n_good": sum(1 for n in nodes if n.get("good"))})
-    items.sort(key=lambda x: (x["live"], x.get("started_at") or x.get("date") or "", x["otid"]), reverse=True)
+    items.sort(key=lambda x: (x["live"], str(x.get("started_at") or x.get("date") or ""), x["otid"]), reverse=True)
     return items
 
 
