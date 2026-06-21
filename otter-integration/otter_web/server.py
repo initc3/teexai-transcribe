@@ -317,9 +317,13 @@ def read_segments(otid):
     return [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
 
 
-def conversations(live):
-    """List every stored conversation from DATA/state + DATA/live, newest first."""
+def conversations(live_sp):
+    """List every stored conversation from DATA/state + DATA/live, newest first.
+    Always includes the currently-live meeting, even before it has been decoded."""
+    live = live_sp["otid"] if live_sp else None
     otids = {p.stem for p in STATE_DIR.glob("*.json")} | {p.stem for p in LIVE_DIR.glob("*.jsonl")}
+    if live:
+        otids.add(live)
     items = []
     for otid in otids:
         st = read_state(otid) or {}
@@ -327,7 +331,7 @@ def conversations(live):
         n_seg = sum(1 for _ in (LIVE_DIR / f"{otid}.jsonl").open()) if (LIVE_DIR / f"{otid}.jsonl").exists() else 0
         meta = st.get("meta") or {}
         items.append({
-            "otid": otid, "title": meta.get("title") or otid,
+            "otid": otid, "title": meta.get("title") or (live_sp.get("title") if otid == live and live_sp else None) or otid,
             "started_at": meta.get("started_at"), "date": meta.get("date"),
             "visibility": st.get("visibility", "private"),
             "live": otid == live, "n_segments": n_seg, "n_nodes": len(nodes),
@@ -396,7 +400,7 @@ class H(BaseHTTPRequestHandler):
         if self.path.startswith("/conversations"):
             owner = self.is_owner()
             try:
-                items = conversations(live_otid())
+                items = conversations(live_speech(otter()))
             except Exception as e:
                 return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
             if not owner:

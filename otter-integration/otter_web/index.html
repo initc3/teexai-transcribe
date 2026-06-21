@@ -193,6 +193,7 @@ async function loadList() {
     open(el.dataset.otid, el.dataset.live === '1');
   };
   for (const s of listEl.querySelectorAll('.share')) s.onclick = ev => { ev.stopPropagation(); shareLink(s.dataset.otid, s); };
+  timers.push(setInterval(() => { if (!cur) loadList(); }, 10000));  // auto-refresh so a newly-started meeting shows up
 }
 function card(c) {
   const badge = c.live ? '<span class="badge live">● LIVE</span>' : '';
