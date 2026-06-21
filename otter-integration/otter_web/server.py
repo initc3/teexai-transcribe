@@ -10,7 +10,7 @@ it accounts for what's on screen; otherwise a fast text model.
 
   python3 server.py            # serves on http://localhost:8137
 """
-import base64, hashlib, hmac, json, os, re, sys
+import base64, hashlib, hmac, json, os, re, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -47,8 +47,13 @@ STATE_DIR = DATA / "state"
 LIVE_DIR = DATA / "live"
 
 
+_SESSION = {"s": None, "t": 0.0}
 def otter():
-    return open_session()
+    # reuse the session (open_session does a /user round-trip each call); cookie is static
+    now = time.time()
+    if _SESSION["s"] is None or now - _SESSION["t"] > 300:
+        _SESSION["s"] = open_session(); _SESSION["t"] = now
+    return _SESSION["s"]
 
 
 def live_speech(s):
@@ -58,13 +63,23 @@ def live_speech(s):
     return live[0] if live else None
 
 
+_LIVE = {"sp": None, "t": 0.0}
+def live_speech_cached(s, ttl=8):
+    # the live-status check (speeches list) is the slow per-request cost; cache it briefly so the
+    # dashboard's /conversations + /graph polls (and otter_wake) don't each re-hit the Otter API
+    now = time.time()
+    if now - _LIVE["t"] >= ttl:
+        _LIVE.update(sp=live_speech(s), t=now)
+    return _LIVE["sp"]
+
+
 def proxied(url):
     return "/frame?u=" + base64.urlsafe_b64encode(url.encode()).decode()
 
 
 def live_state(after):
     s = otter()
-    sp = live_speech(s)
+    sp = live_speech_cached(s)
     if not sp:
         return {"live": False}
     d = s.get(OTTER + "speech", params={"userid": s.uid, "otid": sp["otid"]}, timeout=40).json()["speech"]
@@ -89,7 +104,7 @@ def fetch_frame(url):
 
 def latest_slide():
     s = otter()
-    sp = live_speech(s)
+    sp = live_speech_cached(s)
     if not sp:
         return None
     d = s.get(OTTER + "speech", params={"userid": s.uid, "otid": sp["otid"]}, timeout=40).json()["speech"]
@@ -207,7 +222,7 @@ def append_transcript(otid, rows, logged):
 
 def graph_state():
     s = otter()
-    sp = live_speech(s)
+    sp = live_speech_cached(s)
     if not sp:
         return {"live": False}
     otid = sp["otid"]
@@ -400,7 +415,7 @@ class H(BaseHTTPRequestHandler):
         if self.path.startswith("/conversations"):
             owner = self.is_owner()
             try:
-                items = conversations(live_speech(otter()))
+                items = conversations(live_speech_cached(otter()))
             except Exception as e:
                 return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
             if not owner:
