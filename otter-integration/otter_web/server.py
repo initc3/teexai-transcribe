@@ -91,7 +91,7 @@ def live_state(after):
     mx = max((r["order"] for r in rows), default=after)
     imgs = sorted(d.get("images") or [], key=lambda x: x.get("offset") or 0)
     images = [{"offset": im.get("offset"), "src": proxied(im["image_url"])} for im in imgs[-8:]]
-    return {"live": True, "title": sp.get("title"), "segments": rows, "max_order": mx, "images": images}
+    return {"live": True, "otid": sp["otid"], "title": sp.get("title"), "segments": rows, "max_order": mx, "images": images}
 
 
 def fetch_frame(url):

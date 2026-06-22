@@ -600,8 +600,11 @@ async function openHash(otid) {  // restore the meeting named in #c= on refresh,
   try {
     const cs = await (await api('/conversations')).json();
     const c = Array.isArray(cs) && cs.find(x => x.otid === otid);
-    if (!c) { loadList(); return; }
-    open(otid, !!c.live);
+    if (c) { open(otid, !!c.live); return; }
+    // stale otid (e.g. a live placeholder that became a permanent hash) — pick up the current live meeting if any
+    const lv = await (await api('/live?after=0')).json();
+    if (lv && lv.live && lv.otid) { open(lv.otid, true); return; }
+    loadList();
   } catch (e) { loadList(); }
 }
 
@@ -743,11 +746,26 @@ function renderSlides(images, isLive) {
   }
   slideCap.textContent = images.length + ' screenshot' + (images.length > 1 ? 's' : '') + ' captured';
 }
+async function endLiveFollow(msg) {  // the followed meeting ended — settle into its finalized transcript
+  if (!cur) return;
+  clearTimers();
+  const otid = cur.otid;
+  cur = { otid, live: false };
+  await loadStored(otid);  // re-renders feed + graph from the saved (decoded) state
+  meet.innerHTML = '<span class="dot"></span>' + esc(home.textContent || 'meeting') +
+    ' <span style="color:#c9a227;font-size:11px">· just ended — final transcript</span>';
+}
 async function poll() {
   if (!cur || !cur.live) return;
   try {
     const r = await api('/live?after=' + after); const d = await r.json();
-    if (d.error || !d.live) { meet.innerHTML = '<span class="dot"></span>' + (d.error || 'meeting ended'); renderSlides([], false); return; }
+    if (d.error || !d.live) return endLiveFollow(d.error || 'meeting ended');
+    if (d.otid && d.otid !== cur.otid) {
+      // the live session got its permanent otid (numeric placeholder → hash), or a new meeting took over
+      cur.otid = d.otid;
+      if (!viewMode) history.replaceState(null, '', '#c=' + encodeURIComponent(d.otid));
+      after = 0; segs = []; feed.innerHTML = '';
+    }
     meet.innerHTML = '<span class="dot live"></span>' + (d.title || 'live meeting');
     home.textContent = d.title || 'live meeting';
     for (const s of d.segments) {
