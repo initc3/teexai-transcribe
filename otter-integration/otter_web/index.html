@@ -37,6 +37,36 @@
   #helpToggle { background: none; color: #6fb0e8; padding: 0; font-size: 12px; font-weight: 600; text-decoration: underline; }
   #help { display: none; margin-top: 10px; background: #0e1017; border: 1px solid #1e2029; border-radius: 8px; padding: 12px 16px; font-size: 12.5px; color: #aeb4c0; max-width: 880px; }
   #help.show { display: block; }
+  /* connections panel */
+  .conns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .conn { background: #0e1017; border: 1px solid #1e2029; border-radius: 9px; padding: 10px 13px; min-width: 230px; flex: 1 1 230px; max-width: 320px; }
+  .conn .top { display: flex; gap: 8px; align-items: center; }
+  .conn .sdot { width: 9px; height: 9px; border-radius: 50%; background: #3a3030; flex: none; }
+  .conn.on .sdot { background: #2eea7e; box-shadow: 0 0 6px #2eea7e88; }
+  .conn.locked .sdot { background: #5a4a1a; }
+  .conn .name { font-size: 12.5px; font-weight: 700; color: #cdd2da; }
+  .conn .tag { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; color: #c9a227; border: 1px solid #3a3320; border-radius: 5px; padding: 1px 5px; margin-left: auto; text-transform: uppercase; }
+  .conn .who { font-size: 11.5px; color: #8a909c; margin-top: 5px; word-break: break-all; }
+  .conn .who b { color: #6fb0e8; font-weight: 600; }
+  .conn .err { color: #e08a8a; font-size: 10.5px; margin-top: 4px; white-space: pre-wrap; }
+  .conn .cal { font-size: 11px; color: #8a909c; margin-top: 6px; line-height: 1.7; }
+  .conn .cal b { color: #6fb0e8; font-weight: 600; } .conn .cal a { color: #2eea7e; }
+  .gemwrap { margin-top: 8px; border-top: 1px solid #1a1c24; padding-top: 8px; }
+  .gembtn { background: #1f2330; color: #9aa0ad; font-size: 11px; font-weight: 600; padding: 4px 10px; }
+  .gembtn:hover { color: #cdd2da; }
+  .gem { margin-top: 6px; font-size: 11px; color: #8a909c; }
+  .gemrow { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 3px 0; }
+  .gem .gimp { background: #14241a; color: #2eea7e; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 5px; }
+  .gem .gimp:disabled { opacity: .7; }
+  .conn .cta { margin-top: 8px; }
+  .conn .cta button { background: #1f2330; color: #cdd2da; font-size: 11px; font-weight: 600; padding: 5px 11px; }
+  .conn .cta button:hover { background: #283041; }
+  .onboard { display: none; margin-top: 8px; border-top: 1px solid #1a1c24; padding-top: 8px; font-size: 11.5px; color: #aeb4c0; }
+  .onboard.show { display: block; }
+  .onboard h5 { margin: 8px 0 3px; color: #c9a227; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+  .onboard code, .onboard .url { display: block; background: #15171f; border: 1px solid #23262f; border-radius: 6px; padding: 6px 8px; color: #9fd0a8; font-size: 10.5px; margin: 3px 0; word-break: break-all; }
+  .onboard ol { margin: 4px 0 4px 16px; padding: 0; } .onboard li { margin: 2px 0; }
+  .onboard .cp { background: #1f2330; color: #9aa0ad; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 5px; }
   #help h4 { margin: 10px 0 4px; color: #c9a227; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
   #help h4:first-child { margin-top: 0; }
   #help b { color: #cdd2da; }
@@ -186,6 +216,7 @@
     </div>
     <button id="helpToggle">how it works / help</button>
   </div>
+  <div id="connections" class="conns"></div>
   <div id="help">
     <h4>What you're looking at</h4>
     <div>Each meeting becomes a transcript plus a live <b>topic graph</b>. Green nodes are decisions and
@@ -256,7 +287,7 @@
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 // ---------- access model: owner / view / public ----------
-let ownerToken = null, viewMode = null;  // viewMode = {otid, sig}
+let ownerToken = null, viewMode = null, userToken = null;  // viewMode = {otid, sig}
 (function bootAuth() {
   const h = location.hash || '';
   let m;
@@ -269,6 +300,11 @@ let ownerToken = null, viewMode = null;  // viewMode = {otid, sig}
     ownerToken = localStorage.getItem('otter_owner_token');
   }
   if (h) history.replaceState(null, '', location.pathname + location.search);
+  // every non-owner visitor gets a stable user token (their handle for connecting mechanisms)
+  if (!ownerToken && !viewMode) {
+    userToken = localStorage.getItem('otter_user_token');
+    if (!userToken) { userToken = (crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2); localStorage.setItem('otter_user_token', userToken); }
+  }
 })();
 // the app may be mounted under a prefix on the CVM (e.g. /otter/), so resolve API/asset
 // paths relative to the page dir instead of the server root.
@@ -278,6 +314,7 @@ function api(path, opts) {
   opts = opts || {};
   const headers = Object.assign({}, opts.headers);
   if (ownerToken) headers['X-Auth-Token'] = ownerToken;
+  else if (userToken) headers['X-User-Token'] = userToken;
   return fetch(apiUrl(path), Object.assign({}, opts, { headers }));
 }
 
@@ -312,6 +349,91 @@ function renderIdentity() {
   }
 }
 function ownerLinkUrl() { return location.origin + API_BASE + '#owner=' + ownerToken; }
+
+// ---------- connections panel ----------
+function onboardUrl() { return location.origin + apiUrl('/onboard/otter') + '?u=' + encodeURIComponent(userToken || ''); }
+function otterOnboardHtml(isOwner) {
+  if (isOwner) return '<div class="onboard" id="ob-otter">This server\'s Otter session is logged out. '
+    + 'Re-authenticate the server cookie: sign into otter.ai in the server\'s Chrome profile, or set '
+    + '<code>OTTER_SESSIONID</code> + <code>OTTER_CSRFTOKEN</code> (sealed mode), then reload.</div>';
+  const u = esc(onboardUrl());
+  return '<div class="onboard" id="ob-otter">'
+    + '<div>Otter has no public API — connect by handing this app your logged-in otter.ai cookie. Two ways:</div>'
+    + '<h5>Otter Pilot extension (one click)</h5>'
+    + '<ol><li>Load <code>extensions/otter-pilot</code> in Chrome (chrome://extensions → Developer mode → Load unpacked).</li>'
+    + '<li>Stay signed into otter.ai, open the extension, paste this URL, click <b>Send my Otter login</b>:</li></ol>'
+    + '<div class="url" id="obUrl">' + u + '</div><button class="cp" data-cp="' + u + '">copy URL</button>'
+    + '<h5>Or: capture script (local)</h5><code>python3 onboard_otter.py "' + u + '"</code></div>';
+}
+function googleAuthUrl() { return apiUrl('/google/auth') + '?' + (ownerToken ? 'token=' + encodeURIComponent(ownerToken) : 'u=' + encodeURIComponent(userToken || '')); }
+function connCard(m, isOwner) {
+  const on = !!m.connected, locked = !!m.locked;
+  const tag = m.owner_only ? '<span class="tag">owner</span>' : '';
+  let body = on
+    ? '<div class="who">✓ <b>' + esc(m.identity || 'connected') + '</b></div>'
+    : '<div class="who">not connected' + (m.detail ? ' — ' + esc(m.detail) : '') + '</div>';
+  if (on && m.id === 'google') body += '<div class="cal" data-cal="1"><span class="ph">loading calendar…</span></div>'
+    + '<div class="gemwrap"><button class="gembtn" data-gem-scan="1">📝 scan Gemini notes</button><div class="gem"></div></div>';
+  if (m.error) body += '<div class="err">' + esc(m.error) + '</div>';
+  let cta = '', onboard = '';
+  if (!on && !locked) {
+    if (m.id === 'otter') { onboard = otterOnboardHtml(isOwner); cta = '<div class="cta"><button data-ob="ob-otter">connect Otter →</button></div>'; }
+    else if (m.id === 'google' && !m.detail) cta = '<div class="cta"><button data-go="1">connect Google →</button></div>';
+  }
+  return '<div class="conn ' + (on ? 'on' : '') + (locked ? ' locked' : '') + '">'
+    + '<div class="top"><span class="sdot"></span><span class="name">' + esc(m.label) + '</span>' + tag + '</div>'
+    + body + cta + onboard + '</div>';
+}
+async function loadConnections() {
+  const host = document.getElementById('connections');
+  if (!host) return;
+  let d;
+  try { d = await (await api('/connections')).json(); }
+  catch (e) { host.innerHTML = '<div class="conn"><div class="err">connections: ' + esc(String(e)) + '</div></div>'; return; }
+  if (d.error) { host.innerHTML = '<div class="conn"><div class="err">' + esc(d.error) + '</div></div>'; return; }
+  host.innerHTML = (d.mechanisms || []).map(m => connCard(m, !!d.owner)).join('');
+  host.querySelectorAll('[data-ob]').forEach(b => b.onclick = () => document.getElementById(b.dataset.ob).classList.toggle('show'));
+  host.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { location.href = googleAuthUrl(); });
+  host.querySelectorAll('[data-gem-scan]').forEach(b => b.onclick = () => scanGemini(b));
+  host.querySelectorAll('.cp').forEach(b => b.onclick = () => { navigator.clipboard.writeText(b.dataset.cp); b.textContent = 'copied!'; setTimeout(() => b.textContent = 'copy URL', 1500); });
+  if (host.querySelector('.cal')) loadCalendar();
+}
+async function loadCalendar() {
+  const slot = document.querySelector('#connections .cal');
+  if (!slot) return;
+  let d;
+  try { d = await (await api('/calendar')).json(); }
+  catch (e) { slot.innerHTML = '<span class="err">' + esc(String(e)) + '</span>'; return; }
+  if (d.error) { slot.innerHTML = '<span class="err">' + esc(d.error) + '</span>'; return; }
+  if (!d.length) { slot.textContent = 'no meetings in the next 24h'; return; }
+  slot.innerHTML = d.slice(0, 3).map(e => {
+    const t = e.start ? new Date(e.start) : null;
+    const when = t && !isNaN(t) ? t.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : esc(e.start || '');
+    return '📅 <b>' + esc(when) + '</b> · ' + esc(e.summary) + (e.hangout ? ' · <a href="' + esc(e.hangout) + '" target="_blank">join</a>' : '');
+  }).join('<br>');
+}
+const escA = s => esc(s).replace(/"/g, '&quot;');
+async function scanGemini(btn) {
+  const slot = btn.parentElement.querySelector('.gem');
+  slot.innerHTML = '<span class="ph">scanning…</span>';
+  let d;
+  try { d = await (await api('/gemini')).json(); }
+  catch (e) { slot.innerHTML = '<span class="err">' + esc(String(e)) + '</span>'; return; }
+  if (d.error) { slot.innerHTML = '<span class="err">' + esc(d.error) + '</span>'; return; }
+  if (!d.length) { slot.textContent = 'no Gemini notes found (last 30 days)'; return; }
+  slot.innerHTML = d.map(n => '<div class="gemrow"><span>' + esc(n.date || '') + ' · ' + esc(n.title) + '</span>'
+    + '<button class="gimp" data-fid="' + escA(n.file_id) + '" data-title="' + escA(n.title) + '" data-date="' + escA(n.date || '') + '">import</button></div>').join('');
+  slot.querySelectorAll('.gimp').forEach(x => x.onclick = () => importGemini(x));
+}
+async function importGemini(x) {
+  x.textContent = 'importing…'; x.disabled = true;
+  let d;
+  try { d = await (await api('/gemini/import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ file_id: x.dataset.fid, title: x.dataset.title, date: x.dataset.date }) })).json(); }
+  catch (e) { x.textContent = 'error'; x.title = String(e); x.disabled = false; return; }
+  if (d.error) { x.textContent = 'error'; x.title = d.error; x.disabled = false; return; }
+  x.textContent = '✓ imported (' + d.n_nodes + ' nodes)';
+  if (!cur) loadList();
+}
 
 // view: 'list' or otid; cur = {otid, live}
 let cur = null, after = 0, segs = [], lastSlide = '';
@@ -865,6 +987,7 @@ function viewLanding() {
 
 // ---------- boot dispatch ----------
 renderIdentity();
+if (!viewMode) loadConnections();
 if (viewMode) viewLanding();
 else if (ownerToken) loadList();
 else guestLanding();

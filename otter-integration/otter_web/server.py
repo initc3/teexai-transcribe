@@ -17,12 +17,12 @@ from urllib.parse import urlparse, parse_qs
 import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from otter_session import open_session
-from otter_web import matrix
+from otter_web import matrix, users, connections, google_app
 
 HERE = Path(__file__).parent
 PORT = int(os.environ.get("PORT", 8137))
-OTTER = "https://otter.ai/forward/api/v1/"
-NEAR_URL = "https://cloud-api.near.ai/v1/chat/completions"
+OTTER = os.environ.get("OTTER_API_BASE", "https://otter.ai/forward/api/v1/")
+NEAR_URL = os.environ.get("NEAR_URL", "https://cloud-api.near.ai/v1/chat/completions")
 TEXT_MODEL = os.environ.get("NEAR_MODEL", "deepseek-ai/DeepSeek-V4-Flash")
 VL_MODEL = os.environ.get("NEAR_VL_MODEL", "google/gemini-2.5-flash")
 
@@ -42,7 +42,7 @@ def share_sig(otid):
 def share_url(otid):
     return f"{BASE_URL}/#view={otid}.{share_sig(otid)}"
 
-DATA = Path(os.environ.get("OTTER_OUT", "/data/otter" if os.path.isdir("/data") else str(HERE / "data")))
+DATA = users.DATA
 STATE_DIR = DATA / "state"
 LIVE_DIR = DATA / "live"
 
@@ -376,6 +376,23 @@ def backfill(limit=12, todo=None):
     BACKFILL.update(running=False, current=None)
 
 
+def ingest_gemini(uid, file_id, title=None, date=None):
+    """Pull a Gemini-notes doc and run it through the SAME decode pipeline as Otter transcripts —
+    each non-empty line is a segment (speaker 'Gemini'). It then shows up as a conversation."""
+    text = google_app.gemini_text(uid, file_id)
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    otid = "gem_" + file_id
+    rows = [{"uuid": f"{file_id}:{i}", "speaker": "Gemini", "text": l, "order": i} for i, l in enumerate(lines)]
+    st = load_state(otid)
+    st.setdefault("meta", {})
+    st["meta"]["title"] = title or "Gemini notes"
+    st["meta"]["started_at"] = date
+    st["meta"]["source"] = "gemini"
+    st["started"] = True  # never let a live view re-announce an imported note
+    _decode_segments(otid, rows, st)
+    return {"otid": otid, "title": st["meta"]["title"], "n_segments": len(rows), "n_nodes": len(st["nodes"])}
+
+
 def start_backfill(limit=12):
     if BACKFILL["running"]:
         return {"started": False, "total": BACKFILL["total"]}
@@ -567,6 +584,9 @@ class H(BaseHTTPRequestHandler):
         self.send_response(code); self.send_header("content-type", ctype)
         self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b)
 
+    def _redirect(self, url):
+        self.send_response(302); self.send_header("Location", url); self.end_headers()
+
     def log_message(self, *a):
         pass
 
@@ -581,6 +601,14 @@ class H(BaseHTTPRequestHandler):
             return True
         t = self._token()
         return bool(t) and hmac.compare_digest(t, OWNER_TOKEN)
+
+    def uid(self):
+        """Which user is this? 'owner' (owner token, or auth-disabled dev), else a hashed
+        user-token uid, else None (no identity presented yet)."""
+        if self.is_owner():
+            return "owner"
+        ut = self.headers.get("X-User-Token") or self._q("u")
+        return users.uid_for(ut, OWNER_TOKEN)
 
     def share_ok(self, otid):
         if not OWNER_TOKEN:
@@ -613,6 +641,42 @@ class H(BaseHTTPRequestHandler):
             if not owner:
                 items = [c for c in items if c.get("visibility") == "public"]
             return self._send(200, json.dumps(items))
+        if self.path.startswith("/connections"):
+            uid = self.uid()
+            if uid is None:
+                return self._send(200, json.dumps({"uid": None, "owner": False, "mechanisms": []}))
+            return self._send(200, json.dumps({"uid": uid, "owner": uid == "owner",
+                                               "mechanisms": connections.all_status(uid)}))
+        if self.path.startswith("/google/auth"):
+            # full-page redirect to Google consent; state carries the raw token so the callback
+            # (which arrives with no auth header) can re-resolve which user this is for.
+            state = self._token() or self._q("u")
+            if not state or self.uid() is None:
+                return self._send(401, json.dumps({"error": "no user identity (token required)"}))
+            return self._redirect(google_app.auth_url(state))
+        if self.path.startswith("/google/callback"):
+            try:
+                uid = users.uid_for(self._q("state"), OWNER_TOKEN)
+                google_app.connect(uid, self._q("code"))
+                return self._redirect(BASE_URL + "/")
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}), )
+        if self.path.startswith("/calendar"):
+            uid = self.uid()
+            if uid is None:
+                return self._send(401, json.dumps({"error": "no user identity"}))
+            try:
+                return self._send(200, json.dumps(google_app.events(uid)))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path.startswith("/gemini"):
+            uid = self.uid()
+            if uid is None:
+                return self._send(401, json.dumps({"error": "no user identity"}))
+            try:
+                return self._send(200, json.dumps(google_app.gemini_notes(uid)))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         if not self.is_owner():
             return self._send(401, json.dumps({"error": "owner only"}))
         if self.path.startswith("/workflow"):
@@ -648,10 +712,32 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, "{}")
 
     def do_POST(self):
-        if not self.is_owner():
-            return self._send(401, json.dumps({"error": "owner only"}))
         n = int(self.headers.get("content-length", 0))
         body = json.loads(self.rfile.read(n) or b"{}")
+        if self.path.startswith("/onboard/otter"):
+            # any identified user (owner or hashed user-token) may hand the server their Otter
+            # cookie; we validate it via /user before storing — a dead cookie surfaces as an error.
+            uid = self.uid()
+            if uid is None:
+                return self._send(401, json.dumps({"error": "no user identity (token required)"}))
+            try:
+                sid, csrf = body["sessionid"], body["csrftoken"]
+                u = open_session({"sessionid": sid, "csrftoken": csrf}).user
+                ident = u.get("email") or u.get("name") or u.get("username") or str(u.get("userid"))
+                users.set_mech(uid, "otter", {"sessionid": sid, "csrftoken": csrf, "identity": ident})
+                return self._send(200, json.dumps({"connected": True, "identity": ident}))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path.startswith("/gemini/import"):
+            uid = self.uid()
+            if uid is None:
+                return self._send(401, json.dumps({"error": "no user identity"}))
+            try:
+                return self._send(200, json.dumps(ingest_gemini(uid, body["file_id"], body.get("title"), body.get("date"))))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if not self.is_owner():
+            return self._send(401, json.dumps({"error": "owner only"}))
         if self.path == "/recap":
             try:
                 return self._send(200, json.dumps(recap(body.get("text", ""), body.get("use_slide", True))))

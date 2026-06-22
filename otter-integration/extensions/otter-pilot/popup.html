@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 320px; margin: 0; padding: 12px; background: #14161a; color: #d8dde3;
+           font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    h1 { font-size: 13px; margin: 0 0 8px; color: #8ab4f8; }
+    label { display: block; font-size: 11px; color: #99a2ad; margin-bottom: 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 6px; background: #0e1013;
+            border: 1px solid #2a2f37; color: #d8dde3; border-radius: 4px; }
+    button { width: 100%; margin-top: 8px; padding: 8px; background: #2d5fd0; color: #fff;
+             border: 0; border-radius: 4px; cursor: pointer; font: inherit; }
+    button:hover { background: #3a6ee0; }
+    #status { margin-top: 10px; white-space: pre-wrap; word-break: break-word; min-height: 16px; }
+    .ok { color: #6ddb8b; }
+    .err { color: #ff8a8a; }
+  </style>
+</head>
+<body>
+  <h1>Otter Pilot</h1>
+  <label for="url">Copilot onboarding URL</label>
+  <input id="url" type="text" placeholder="http://localhost:8137/onboard/otter?u=...">
+  <button id="send">Send my Otter login</button>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
