@@ -454,6 +454,71 @@ def read_segments(otid):
     return [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
 
 
+def workflow_graph(otid):
+    """The cue/detector pipeline this copilot runs, as a flow-graph, with live counts
+    for THIS conversation pulled from STATE. Mirrors graph_state()'s real hooks AND the
+    cue-config vocabulary (some detectors defined-but-not-yet-wired)."""
+    st = read_state(otid) or {}
+    nodes = st.get("nodes", [])
+    by_kind = {k: sum(1 for n in nodes if n.get("kind") == k)
+               for k in ("topic", "question", "point", "decision", "divergence", "action_item", "aside")}
+    n_decisions = by_kind["decision"] + by_kind["action_item"]
+    n_good = sum(1 for n in nodes if n.get("good"))
+    n_seg = len(read_segments(otid))
+    started = bool(st.get("started"))
+    announced = len(st.get("announced", []))
+
+    def N(id, label, type, count=None, fired=None, sub=None, status="live"):
+        d = {"id": id, "label": label, "type": type, "status": status}
+        if count is not None: d["count"] = count
+        if fired is not None: d["fired"] = fired
+        if sub: d["sub"] = sub
+        return d
+
+    nodes_out = [
+        N("obs", "transcript.segment", "observation", count=n_seg, sub="live Otter line"),
+        N("batch", "batch ≥%d" % DECODE_BATCH, "cue", count=n_seg, sub="DECODE_BATCH gate"),
+        N("decode", "decode()", "decoder", count=len(nodes), sub="one NEAR call → typed nodes"),
+    ]
+    nodes_out += [
+        N("k_topic", "topic", "kind", count=by_kind["topic"]),
+        N("k_question", "question", "kind", count=by_kind["question"]),
+        N("k_point", "point", "kind", count=by_kind["point"]),
+        N("k_decision", "decision", "kind", count=by_kind["decision"]),
+        N("k_divergence", "divergence", "kind", count=by_kind["divergence"]),
+        N("k_action_item", "action_item", "kind", count=by_kind["action_item"]),
+        N("k_aside", "aside", "kind", count=by_kind["aside"]),
+        N("k_good", "good ✨", "kind", count=n_good),
+    ]
+    nodes_out += [
+        N("a_ping", "📡 ping on start → Matrix", "action", fired=started, sub="once per meeting"),
+        N("a_decision", "🟢 decision/action → Matrix", "action", count=n_decisions, fired=n_decisions > 0),
+        N("a_good", "✨ good → Matrix + party-ball", "action", count=n_good, fired=n_good > 0),
+        N("a_recap", "📍 recap for joiners", "action", sub="/recap-matrix (on request)"),
+        N("a_audience", "audience proposer", "action", sub="/audience (human-in-loop)"),
+    ]
+    # cue-config detectors defined in cue-meeting.config.mjs but not yet wired into this server
+    nodes_out += [
+        N("c_redaction", "redaction requested", "cue", sub="cue-config, not wired", status="planned"),
+        N("c_claim", "unverified claim", "cue", sub="cue-config, not wired", status="planned"),
+        N("c_route", "routing requested", "cue", sub="cue-config, not wired", status="planned"),
+    ]
+
+    edges = [
+        ("obs", "batch"), ("batch", "decode"),
+        ("decode", "k_topic"), ("decode", "k_question"), ("decode", "k_point"),
+        ("decode", "k_decision"), ("decode", "k_divergence"), ("decode", "k_action_item"),
+        ("decode", "k_aside"), ("decode", "k_good"),
+        ("k_decision", "a_decision"), ("k_action_item", "a_decision"),
+        ("k_good", "a_good"), ("obs", "a_ping"), ("decode", "a_recap"), ("decode", "a_audience"),
+        ("obs", "c_redaction"), ("obs", "c_claim"), ("obs", "c_route"),
+    ]
+    return {"otid": otid, "title": (st.get("meta") or {}).get("title") or otid,
+            "started": started, "announced": announced, "n_segments": n_seg,
+            "n_nodes": len(nodes), "n_decisions": n_decisions, "n_good": n_good,
+            "nodes": nodes_out, "edges": [{"source": s, "target": t} for s, t in edges]}
+
+
 def conversations(live_sp):
     """List every stored conversation from DATA/state + DATA/live, newest first.
     Always includes the currently-live meeting, even before it has been decoded."""
@@ -550,6 +615,11 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, json.dumps(items))
         if not self.is_owner():
             return self._send(401, json.dumps({"error": "owner only"}))
+        if self.path.startswith("/workflow"):
+            try:
+                return self._send(200, json.dumps(workflow_graph(self._q("otid"))))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         if self.path.startswith("/backfill/status"):
             return self._send(200, json.dumps(BACKFILL))
         if self.path.startswith("/audience"):

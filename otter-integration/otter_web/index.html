@@ -134,6 +134,13 @@
   .tab { background: #15171f; color: #9aa0ad; font-weight: 600; padding: 6px 12px; font-size: 13px; }
   .tab.active { background: #1f2330; color: #cdd2da; }
   #cy { flex: 1; min-height: 0; }
+  #flow { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #cyflow { flex: 1; min-height: 0; }
+  #flowFoot { border-top: 1px solid #16181f; padding: 9px 16px 11px; background: #0d0f16; }
+  #flowLegend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: #9aa0ad; }
+  #flowLegend .lk { display: inline-flex; align-items: center; gap: 5px; }
+  #flowLegend .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  #flowFoot .cap { color: #6b7080; font-size: 11.5px; margin-top: 7px; font-style: italic; }
   #decisions { padding: 8px 16px; max-height: 24%; overflow-y: auto; border-bottom: 1px solid #16181f; }
   #decisions .d { margin: 0 0 7px; font-size: 13px; color: #cdd2da; }
   #decisions .d b { color: #c9a227; text-transform: uppercase; font-size: 10px; letter-spacing: .06em; margin-right: 5px; }
@@ -187,9 +194,9 @@
       <li><b>Shared transcript link</b> — a single read-only transcript you hand out. No token, no other meetings.</li>
       <li><b>Public / guest</b> — anyone with the URL. Sees only meetings you've explicitly marked public.</li>
     </ul>
-    <h4>Your owner token is your key</h4>
-    <div>There's no password. The token in your owner link <b>is</b> your sign-in. Bookmark your owner link
-      (shown above) so you can get back in. Anyone with that link becomes owner, so keep it private.</div>
+    <h4>Your sign-in link is your key</h4>
+    <div>There's no password — your sign-in link <b>is</b> your access (anyone with it becomes owner, so keep it
+      private). <button id="copyOwner2" class="smallbtn" style="display:none">copy my sign-in link</button> Bookmark it so you can get back in.</div>
     <h4>Sharing a single meeting</h4>
     <div>Open a meeting and press <b>share</b> to copy a read-only link to that one transcript. Use the
       <b>audience</b> card to mark a meeting private / cohort / public.</div>
@@ -211,9 +218,17 @@
     <div class="tabs">
       <button class="tab active" id="tabFeed">transcript</button>
       <button class="tab" id="tabGraph">graph</button>
+      <button class="tab" id="tabFlow" style="display:none">workflow</button>
     </div>
     <div class="feed" id="feed"></div>
     <div id="cy" style="display:none"></div>
+    <div id="flow" style="display:none">
+      <div id="cyflow"></div>
+      <div id="flowFoot">
+        <div id="flowLegend"></div>
+        <div class="cap">the cue workflow your copilot runs on each meeting.</div>
+      </div>
+    </div>
   </div>
   <section class="side">
     <div id="slides">
@@ -268,7 +283,7 @@ const back = document.getElementById('back'), home = document.getElementById('ho
 const slides = document.getElementById('slides'), slideBig = document.getElementById('slideBig');
 const slideRow = document.getElementById('slideRow'), slideCap = document.getElementById('slideCap');
 const dec = document.getElementById('decisions');
-const tabFeed = document.getElementById('tabFeed'), tabGraph = document.getElementById('tabGraph');
+const tabFeed = document.getElementById('tabFeed'), tabGraph = document.getElementById('tabGraph'), tabFlow = document.getElementById('tabFlow');
 const liveBar = document.getElementById('liveBar'), hdrImport = document.getElementById('hdrImport');
 
 // ---------- identity strip (always rendered) ----------
@@ -276,20 +291,19 @@ function renderIdentity() {
   const who = document.getElementById('whoami');
   const linkWrap = document.getElementById('ownerLink');
   document.getElementById('helpToggle').onclick = () => document.getElementById('help').classList.toggle('show');
-  document.getElementById('copyOwner').onclick = () => {
+  const cp = document.getElementById('copyOwner2');
+  if (cp) cp.onclick = () => {
     navigator.clipboard.writeText(ownerLinkUrl());
-    const b = document.getElementById('copyOwner'); b.textContent = 'copied!'; setTimeout(() => b.textContent = 'copy', 1500);
+    cp.textContent = 'copied!'; setTimeout(() => cp.textContent = 'copy my sign-in link', 1500);
   };
+  if (linkWrap) linkWrap.style.display = 'none';  // never show the token inline
   if (viewMode) {
     who.innerHTML = '<span class="badge2 shared">shared transcript</span> <span style="color:#6b7080">read-only single meeting</span>';
-    linkWrap.style.display = 'none';
   } else if (ownerToken) {
     who.innerHTML = '<span class="badge2 owner">✓ signed in as owner</span>';
-    document.getElementById('ownerLinkText').textContent = ownerLinkUrl();
-    linkWrap.style.display = 'flex';
+    if (cp) cp.style.display = 'inline-block';
   } else {
     who.innerHTML = '<span class="badge2 guest">guest / public</span> <span style="color:#6b7080">not signed in</span>';
-    linkWrap.style.display = 'none';
   }
 }
 function ownerLinkUrl() { return location.origin + API_BASE + '#owner=' + ownerToken; }
@@ -434,6 +448,8 @@ function open(otid, live) {
   partyInit = false; goodSeen = new Set();
   out.innerHTML = '<span class="ph">loading…</span>';
   document.getElementById('audience').innerHTML = '<span class="ph">proposing a sharing tier…</span>';
+  tabFlow.style.display = (ownerToken && !viewMode) ? 'inline-block' : 'none';
+  flowLoaded = false;
   switchView('feed');
   if (live) startLive(); else loadStored(otid);
 }
@@ -696,17 +712,76 @@ btn.onclick = async () => {
   btn.disabled = false;
 };
 
+// ---------- workflow view (owner only): the cue/detector pipeline ----------
+const FLOW_COLOR = { observation: '#6fb0e8', cue: '#c9a227', decoder: '#b07ed9', kind: '#8a8f9c', action: '#2bb673' };
+let cyflow = null, flowLoaded = false;
+function ensureCyflow() {
+  if (cyflow) return cyflow;
+  cyflow = cytoscape({ container: document.getElementById('cyflow'),
+    style: [
+      { selector: 'node', css: { 'label': 'data(label)', 'color': '#e6e9ef', 'font-size': '10px', 'text-wrap': 'wrap',
+        'text-max-width': '130px', 'text-valign': 'center', 'text-halign': 'center', 'shape': 'roundrectangle',
+        'background-color': 'data(color)', 'background-opacity': 0.18, 'border-width': 1.5, 'border-color': 'data(color)',
+        'width': 'label', 'height': 'label', 'padding': '9px' } },
+      { selector: 'node.planned', css: { 'border-style': 'dashed', 'background-opacity': 0.06, 'color': '#7a808d' } },
+      { selector: 'node.fired', css: { 'border-width': 3 } },
+      { selector: 'edge', css: { 'width': 1.2, 'line-color': '#2f3442', 'target-arrow-color': '#2f3442',
+        'target-arrow-shape': 'triangle', 'arrow-scale': 0.8, 'curve-style': 'bezier' } },
+    ] });
+  return cyflow;
+}
+function flowLabel(n) {
+  let l = n.label;
+  if (n.count) l += '  ×' + n.count;
+  if (n.fired) l += '  ✓';
+  if (n.status === 'planned') l += '\n(planned)';
+  else if (n.sub) l += '\n' + n.sub;
+  return l;
+}
+function renderFlow(d) {
+  ensureCyflow();
+  const els = [];
+  for (const n of d.nodes) {
+    let cls = n.type + (n.status === 'planned' ? ' planned' : '') + (n.fired ? ' fired' : '');
+    els.push({ data: { id: n.id, label: flowLabel(n), color: FLOW_COLOR[n.type] || '#8a8f9c' }, classes: cls });
+  }
+  for (const e of d.edges) els.push({ data: { id: 'fe_' + e.source + '_' + e.target, source: e.source, target: e.target } });
+  cyflow.json({ elements: els });
+  cyflow.layout({ name: 'breadthfirst', directed: true, orientation: 'horizontal', spacingFactor: 1.05,
+    padding: 24, animate: false }).run();
+  cyflow.fit(undefined, 30);
+  const leg = [['observation', 'observation'], ['cue', 'trigger / cue'], ['decoder', 'decoder'],
+               ['kind', 'node kind'], ['action', 'action']];
+  document.getElementById('flowLegend').innerHTML = leg.map(([t, lbl]) =>
+    '<span class="lk"><span class="sw" style="background:' + FLOW_COLOR[t] + '"></span>' + lbl + '</span>').join('') +
+    '<span class="lk" style="color:#7a808d"><span class="sw" style="border:1px dashed #7a808d;background:transparent"></span>planned (cue-config, not wired)</span>' +
+    '<span class="lk">✓ = fired this meeting</span>';
+}
+async function loadFlow() {
+  if (!cur) return;
+  try {
+    const r = await api('/workflow?otid=' + encodeURIComponent(cur.otid)); const d = await r.json();
+    if (d.error) { document.getElementById('flowLegend').innerHTML = '<span class="err">' + esc(d.error) + '</span>'; return; }
+    flowLoaded = true; renderFlow(d);
+  } catch (e) { document.getElementById('flowLegend').innerHTML = '<span class="err">workflow failed: ' + e + '</span>'; }
+}
+
 // tabs
 function switchView(v) {
   graphVisible = v === 'graph';
-  feed.style.display = graphVisible ? 'none' : 'block';
+  const flowV = v === 'flow';
+  feed.style.display = (v === 'feed') ? 'block' : 'none';
   document.getElementById('cy').style.display = graphVisible ? 'block' : 'none';
-  tabFeed.classList.toggle('active', !graphVisible);
+  document.getElementById('flow').style.display = flowV ? 'flex' : 'none';
+  tabFeed.classList.toggle('active', v === 'feed');
   tabGraph.classList.toggle('active', graphVisible);
+  tabFlow.classList.toggle('active', flowV);
   if (graphVisible && lastGraph) { ensureCy(); cy.resize(); lastN = -1; renderGraph(lastGraph); }
+  if (flowV) { ensureCyflow(); cyflow.resize(); if (!flowLoaded) loadFlow(); else cyflow.fit(undefined, 30); }
 }
 tabFeed.onclick = () => switchView('feed');
 tabGraph.onclick = () => switchView('graph');
+tabFlow.onclick = () => switchView('flow');
 
 // ---------- guest / public landing ----------
 function guestLanding() {
