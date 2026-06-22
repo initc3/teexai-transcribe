@@ -169,9 +169,19 @@ DECODE_SYS = (
     "\"text\":\"<=12 word canonical phrasing\",\"rel\":...,\"good\":<true|omit>}]}")
 
 
-def decode(open_topics, segs):
+def hint_text(speakers, corrections):
+    """Owner correction hints, prepended to the decode prompt so new nodes use the fixed names."""
+    parts = []
+    if speakers:
+        parts.append("Speaker names: " + ", ".join(f"{c}={n}" for c, n in speakers.items()) + ".")
+    if corrections:
+        parts.append("Known corrections: " + ", ".join(f"{c['wrong']}→{c['right']}" for c in corrections) + ".")
+    return ("Owner-supplied guidance (use these names verbatim): " + " ".join(parts) + "\n\n") if parts else ""
+
+
+def decode(open_topics, segs, hints=""):
     listing = "\n".join(f"{i}. [{s['speaker']}] {s['text']}" for i, s in enumerate(segs))
-    user = (f"Open topics: {', '.join(open_topics) or '(none yet)'}\n\n"
+    user = (f"{hints}Open topics: {', '.join(open_topics) or '(none yet)'}\n\n"
             f"New segments (in order):\n{listing}\n\nReturn JSON only.")
     r = requests.post(NEAR_URL, headers={"Authorization": f"Bearer {NEAR_KEY}", "content-type": "application/json"},
                       json={"model": TEXT_MODEL, "max_tokens": 800, "temperature": 0.2,
@@ -195,8 +205,27 @@ def load_state(otid):
         STATE[otid] = d
     else:
         STATE[otid] = {"topics": {}, "tcount": 0, "nodes": [], "done": set(), "announced": set(),
-                       "logged": set(), "started": False, "meta": {}}
+                       "logged": set(), "started": False, "meta": {}, "speakers": {}, "corrections": []}
     return STATE[otid]
+
+
+def apply_hints(items, speakers, corrections):
+    """Map each item's `speaker` cluster id through `speakers` (keeping the raw id) and apply
+    text `corrections` (wrong→right) to its `text`. Returns new dicts; inputs untouched."""
+    out = []
+    for it in items:
+        d = dict(it)
+        cid = d.get("speaker")
+        if cid is not None:
+            d["cluster"] = cid
+            d["speaker"] = speakers.get(cid, cid)
+        text = d.get("text", "")
+        for c in corrections:
+            if c.get("wrong"):
+                text = text.replace(c["wrong"], c.get("right", ""))
+        d["text"] = text
+        out.append(d)
+    return out
 
 
 def save_state(otid, st):
@@ -241,7 +270,8 @@ def graph_state():
         matrix.post(f"📡 meeting started — “{sp.get('title') or 'untitled'}”. Watching live; I'll surface decisions, good points, and a recap on request. Watch it live: {BASE_URL}/")
     new = [r for r in rows if r["uuid"] not in st["done"]][:DECODE_MAX]
     if len(new) >= DECODE_BATCH:
-        for nd in decode(list(st["topics"]), new):
+        hints = hint_text(st.get("speakers", {}), st.get("corrections", []))
+        for nd in (decode(list(st["topics"]), new, hints) if hints else decode(list(st["topics"]), new)):
             i = nd.get("i")
             if not isinstance(i, int) or i >= len(new):
                 continue
@@ -266,8 +296,11 @@ def graph_state():
               for lbl, tid in st["topics"].items()]
     decisions = [n["id"] for n in st["nodes"] if n["kind"] in ("decision", "action_item")]
     good = [n["id"] for n in st["nodes"] if n.get("good")]
-    return {"live": True, "title": sp.get("title"), "topics": topics, "nodes": st["nodes"],
-            "decisions": decisions, "good": good}
+    speakers, corrections = st.get("speakers", {}), st.get("corrections", [])
+    return {"live": True, "title": sp.get("title"), "topics": topics,
+            "nodes": apply_hints(st["nodes"], speakers, corrections),
+            "decisions": decisions, "good": good, "speakers": speakers, "corrections": corrections,
+            "clusters": sorted({n["speaker"] for n in st["nodes"]})}
 
 
 def live_otid():
@@ -397,6 +430,18 @@ def visibility_of(otid):
     return (read_state(otid) or {}).get("visibility", "private")
 
 
+def correct(otid, speakers=None, corrections=None):
+    """Merge owner correction hints into state: speaker cluster→name map and wrong→right text fixes."""
+    st = load_state(otid)
+    st.setdefault("speakers", {}); st.setdefault("corrections", [])
+    if speakers:
+        st["speakers"].update(speakers)
+    if corrections:
+        st["corrections"] += [c for c in corrections if c.get("wrong")]
+    save_state(otid, st)
+    return {"speakers": st["speakers"], "corrections": st["corrections"]}
+
+
 def read_state(otid):
     p = STATE_DIR / f"{otid}.json"
     return json.loads(p.read_text()) if p.exists() else None
@@ -439,11 +484,16 @@ def transcript(otid):
     topics = [{"id": tid, "label": lbl, "node_ids": [n["id"] for n in nodes if n["topic_id"] == tid]}
               for lbl, tid in (st.get("topics") or {}).items()]
     meta = st.get("meta") or {}
-    return {"otid": otid, "title": meta.get("title") or otid, "segments": read_segments(otid),
+    speakers, corrections = st.get("speakers", {}), st.get("corrections", [])
+    segs = read_segments(otid)
+    clusters = sorted({s["speaker"] for s in segs} | {n["speaker"] for n in nodes})
+    return {"otid": otid, "title": meta.get("title") or otid,
+            "segments": apply_hints(segs, speakers, corrections),
             "visibility": st.get("visibility", "private"),
-            "topics": topics, "nodes": nodes,
+            "topics": topics, "nodes": apply_hints(nodes, speakers, corrections),
             "decisions": [n["id"] for n in nodes if n["kind"] in ("decision", "action_item")],
-            "good": [n["id"] for n in nodes if n.get("good")]}
+            "good": [n["id"] for n in nodes if n.get("good")],
+            "speakers": speakers, "corrections": corrections, "clusters": clusters}
 
 
 class H(BaseHTTPRequestHandler):
@@ -535,6 +585,11 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/recap":
             try:
                 return self._send(200, json.dumps(recap(body.get("text", ""), body.get("use_slide", True))))
+            except Exception as e:
+                return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
+        if self.path.startswith("/correct"):
+            try:
+                return self._send(200, json.dumps(correct(self._q("otid"), body.get("speakers"), body.get("corrections"))))
             except Exception as e:
                 return self._send(200, json.dumps({"error": f"{type(e).__name__}: {e}"}))
         if self.path.startswith("/visibility"):

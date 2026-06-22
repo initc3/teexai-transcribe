@@ -114,6 +114,16 @@
   #audience .accept { display: flex; gap: 6px; margin-top: 8px; }
   #audience .accept button { background: #15171f; color: #9aa0ad; font-size: 12px; padding: 5px 11px; font-weight: 600; }
   #audience .accept button.on { background: #1f2330; color: #cdd2da; outline: 1px solid #3a4150; }
+  #correct { padding: 10px 18px; border-bottom: 1px solid #16181f; font-size: 12.5px; }
+  #correct .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+  #correct .cid { color: #5f6b85; min-width: 52px; font-size: 11px; }
+  #correct input { background: #15171f; border: 1px solid #2a2e3b; color: #cdd2da; border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 12px; flex: 1; min-width: 0; }
+  #correct button { background: #1f2330; color: #9aa0ad; font-size: 11px; font-weight: 600; padding: 5px 10px; }
+  #correct button:hover { color: #cdd2da; }
+  #correct .sec { color: #6b7080; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin: 9px 0 3px; }
+  #correct .arrow { color: #5f6b85; }
+  #correct .fix { color: #c3c8d2; margin: 2px 0; }
+  #correct .fix b { color: #c9a227; }
   #out { padding: 16px 20px; overflow-y: auto; white-space: pre-wrap; font-size: 14.5px; line-height: 1.6; color: #e6e9ef; flex: 1; }
   #out .ph { color: #5f6470; }
   #out .when { color: #6b7080; font-size: 11px; margin-bottom: 10px; }
@@ -211,6 +221,8 @@
       <div class="row" id="slideRow"></div>
       <div class="cap" id="slideCap"></div>
     </div>
+    <h3 id="correctHdr" style="display:none">✎ corrections — fix speaker names &amp; mis-hears</h3>
+    <div id="correct" style="display:none"></div>
     <h3>audience — who is this fit to share with?</h3>
     <div id="audience"><span class="ph">proposes a sharing tier (private / cohort / public). You accept.</span></div>
     <h3>decisions &amp; good points</h3>
@@ -417,7 +429,8 @@ function open(otid, live) {
   listEl.classList.remove('show'); mainEl.classList.remove('hide');
   liveBar.classList.remove('show');
   back.style.display = viewMode ? 'none' : 'inline-block';
-  after = 0; segs = []; lastSlide = ''; feed.innerHTML = '<span class="ph">loading transcript…</span>'; lastN = -1; gnodes = []; nodeMap = {};
+  after = 0; segs = []; lastSlide = ''; feed.innerHTML = '<span class="ph">loading transcript…</span>'; lastN = -1; gnodes = []; nodeMap = {}; lastCorrectSig = '';
+  correctEl.style.display = correctHdr.style.display = 'none';
   partyInit = false; goodSeen = new Set();
   out.innerHTML = '<span class="ph">loading…</span>';
   document.getElementById('audience').innerHTML = '<span class="ph">proposing a sharing tier…</span>';
@@ -441,6 +454,7 @@ async function loadStored(otid, sig) {
   renderDecisions(d); lastGraph = d;
   gnodes = d.nodes; nodeMap = {}; for (const n of d.nodes) nodeMap[n.id] = n;
   out.innerHTML = '<span class="ph">Stored conversation. Open the graph tab and tap a topic to recap it.</span>';
+  renderCorrect(otid, d.clusters, d.speakers, d.corrections);
   initAudience(otid, d.visibility);
 }
 
@@ -481,6 +495,41 @@ async function setVisibility(otid, vis, p) {
     if (d.error) { audienceEl.insertAdjacentHTML('beforeend', '<div class="err">' + esc(d.error) + '</div>'); return; }
     renderAudience(otid, d.visibility, p || audienceEl._proposal || {});
   } catch (e) { audienceEl.insertAdjacentHTML('beforeend', '<div class="err">' + e + '</div>'); }
+}
+// ---------- corrections (owner only) ----------
+const correctEl = document.getElementById('correct'), correctHdr = document.getElementById('correctHdr');
+let correctOtid = null;
+function renderCorrect(otid, clusters, speakers, corrections) {
+  if (viewMode || !ownerToken) { correctEl.style.display = correctHdr.style.display = 'none'; return; }
+  correctOtid = otid;
+  correctEl.style.display = 'block'; correctHdr.style.display = 'block';
+  let h = '<div class="sec">speaker names</div>';
+  if (!(clusters || []).length) h += '<span class="ph">no speaker clusters seen yet.</span>';
+  for (const cid of (clusters || [])) h += `<div class="row"><span class="cid">${esc(cid)}</span>` +
+    `<input data-cid="${esc(cid)}" value="${esc((speakers || {})[cid] || '')}" placeholder="name" />` +
+    `<button data-savecid="${esc(cid)}">save</button></div>`;
+  h += '<div class="sec">text fixes (wrong → right)</div>';
+  for (const c of (corrections || [])) h += `<div class="fix"><b>${esc(c.wrong)}</b> <span class="arrow">→</span> ${esc(c.right)}</div>`;
+  h += '<div class="row"><input id="fixWrong" placeholder="wrong" /><span class="arrow">→</span>' +
+    '<input id="fixRight" placeholder="right" /><button id="fixAdd">add</button></div>';
+  correctEl.innerHTML = h;
+  for (const b of correctEl.querySelectorAll('[data-savecid]')) b.onclick = () => {
+    const inp = correctEl.querySelector(`input[data-cid="${b.dataset.savecid}"]`);
+    postCorrect({ speakers: { [b.dataset.savecid]: inp.value.trim() } });
+  };
+  document.getElementById('fixAdd').onclick = () => {
+    const w = document.getElementById('fixWrong').value.trim(), r = document.getElementById('fixRight').value.trim();
+    if (w) postCorrect({ corrections: [{ wrong: w, right: r }] });
+  };
+}
+async function postCorrect(payload) {
+  const r = await api('/correct?otid=' + encodeURIComponent(correctOtid), {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+  const d = await r.json();
+  if (d.error) { correctEl.insertAdjacentHTML('beforeend', '<div class="err">' + esc(d.error) + '</div>'); return; }
+  // re-pull the transcript so names/text re-render everywhere, then refresh the panel
+  if (cur && cur.live) { pollGraph(); }
+  else { await loadStored(correctOtid, viewMode ? viewMode.sig : undefined); }
 }
 function nodeMarks(d) {
   const good = new Set(d.good || []), m = {};
@@ -542,7 +591,7 @@ async function poll() {
 }
 
 // ---------- graph (shared by live + stored) ----------
-let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastN = -1;
+let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastN = -1, lastCorrectSig = '';
 function ensureCy() {
   if (cy) return cy;
   cy = cytoscape({ container: document.getElementById('cy'),
@@ -625,6 +674,8 @@ async function pollGraph() {
     if (d.error || !d.live) return;
     gnodes = d.nodes; nodeMap = {}; for (const n of d.nodes) nodeMap[n.id] = n;
     lastGraph = d; renderDecisions(d); partyBall(d.good || []); markFeed(d);
+    const csig = JSON.stringify([d.clusters, d.speakers, d.corrections]);
+    if (csig !== lastCorrectSig) { lastCorrectSig = csig; renderCorrect(cur.otid, d.clusters, d.speakers, d.corrections); }
     if (graphVisible) renderGraph(d);
   } catch (e) {}
 }
