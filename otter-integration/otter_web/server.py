@@ -390,7 +390,9 @@ AUDIENCE_SYS = (
     "You are an audience proposer for a meeting copilot. Given a conversation's decoded insights and a "
     "transcript sample, judge who it's fit to share with. Tiers: \"public\" (anyone), \"cohort\" "
     "(semi-trusted peers), \"private\" (owner only). Be conservative: flag PII, named competitor call-outs, "
-    "confidential, or half-baked/unresolved content as reasons NOT to go public. Return JSON only: "
+    "confidential, or half-baked/unresolved content as reasons NOT to go public. Do NOT flag ordinary "
+    "internal project or feature names — only flag genuinely confidential/unreleased, PII, or "
+    "competitor-sensitive material. Return JSON only: "
     "{\"suggested\":\"private\"|\"cohort\"|\"public\",\"confidence\":<0-1>,\"rationale\":\"1-2 sentences\","
     "\"redactions\":[\"short note on anything sensitive to strip before sharing\"]}")
 

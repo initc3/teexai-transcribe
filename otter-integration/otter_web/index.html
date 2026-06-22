@@ -450,7 +450,7 @@ function open(otid, live) {
   listEl.classList.remove('show'); mainEl.classList.remove('hide');
   liveBar.classList.remove('show');
   back.style.display = viewMode ? 'none' : 'inline-block';
-  after = 0; segs = []; lastSlide = ''; feed.innerHTML = '<span class="ph">loading transcript…</span>'; lastSig = ''; expanded = null; gnodes = []; nodeMap = {}; lastCorrectSig = '';
+  after = 0; segs = []; lastSlide = ''; feed.innerHTML = '<span class="ph">loading transcript…</span>'; lastSig = ''; expanded = null; focusT = null; gnodes = []; nodeMap = {}; lastCorrectSig = '';
   correctEl.style.display = correctHdr.style.display = 'none';
   partyInit = false; goodSeen = new Set();
   out.innerHTML = '<span class="ph">loading…</span>';
@@ -510,13 +510,18 @@ function renderAudience(otid, current, p) {
 async function initAudience(otid, current) {
   if (viewMode) { audienceEl.style.display = 'none'; return; }  // owner-only card
   audienceEl.style.display = 'block';
-  audienceEl.innerHTML = '<span class="ph">proposing a sharing tier…</span>';
-  try {
-    const r = await api('/audience?otid=' + encodeURIComponent(otid)); const p = await r.json();
-    if (p.error) { audienceEl.innerHTML = '<span class="err">' + esc(p.error) + '</span>'; return; }
-    renderAudience(otid, current, p);
-    audienceEl._proposal = p;
-  } catch (e) { audienceEl.innerHTML = '<span class="err">audience failed: ' + e + '</span>'; }
+  // on-demand (saves an AI call per open): show current tier + a button that proposes when asked
+  audienceEl.innerHTML = '<div class="row1">now: <b>' + esc(current || 'private') + '</b></div>'
+    + '<button class="smallbtn" id="propBtn">propose who to share with (1 AI call)</button>';
+  document.getElementById('propBtn').onclick = async () => {
+    audienceEl.innerHTML = '<span class="ph">proposing a sharing tier…</span>';
+    try {
+      const r = await api('/audience?otid=' + encodeURIComponent(otid)); const p = await r.json();
+      if (p.error) { audienceEl.innerHTML = '<span class="err">' + esc(p.error) + '</span>'; return; }
+      renderAudience(otid, current, p);
+      audienceEl._proposal = p;
+    } catch (e) { audienceEl.innerHTML = '<span class="err">audience failed: ' + e + '</span>'; }
+  };
 }
 async function setVisibility(otid, vis, p) {
   try {
@@ -622,7 +627,7 @@ async function poll() {
 }
 
 // ---------- graph (shared by live + stored) ----------
-let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastSig = '', lastCorrectSig = '', expanded = null, graphAll = false;
+let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastSig = '', lastCorrectSig = '', expanded = null, graphAll = false, focusT = null;
 function ensureCy() {
   if (cy) return cy;
   cy = cytoscape({ container: document.getElementById('cy'),
@@ -640,7 +645,7 @@ function ensureCy() {
       { selector: 'node.seg.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 17, 'height': 17 } },
       { selector: 'node.seg.divergence', css: { 'background-color': '#c0524a' } },
       { selector: 'node.seg.good', css: { 'border-width': 3, 'border-color': '#ff5ea8' } },
-      { selector: 'node.seg.lbl', css: { 'label': 'data(label)', 'font-size': '9px', 'color': '#cdd2da', 'text-halign': 'right', 'text-valign': 'center', 'text-margin-x': 4, 'text-wrap': 'wrap', 'text-max-width': '150px', 'z-index': 10 } },
+      { selector: 'node.seg.row', css: { 'label': 'data(label)', 'font-size': '12px', 'color': '#cdd2da', 'text-halign': 'right', 'text-valign': 'center', 'text-margin-x': 7, 'text-wrap': 'wrap', 'text-max-width': '620px', 'z-index': 10 } },
       { selector: 'node:selected', css: { 'border-width': 3, 'border-color': '#cdd2da' } },
       { selector: 'edge', css: { 'width': 1, 'line-color': '#23283a', 'curve-style': 'bezier', 'target-arrow-shape': 'none', 'opacity': 0.45 } },
     ] });
@@ -648,7 +653,8 @@ function ensureCy() {
     const dt = e.target.data();
     if (dt.minor) { graphAll = true; lastSig = ''; renderGraph(lastGraph); }
     else if (dt.combine) { graphAll = false; lastSig = ''; renderGraph(lastGraph); }
-    else clusterRecap(dt.tid, dt.tlabel);
+    else if (dt.back) { focusT = null; lastSig = ''; renderGraph(lastGraph); }
+    else { focusT = dt.tid; clusterRecap(dt.tid, dt.tlabel); lastSig = ''; renderGraph(lastGraph); }
   });
   cy.on('tap', 'node.seg', e => showNode(e.target.id()));
   return cy;
@@ -667,46 +673,57 @@ function renderGraph(d) {
   const order = {}; let oi = 0;
   for (const n of d.nodes) if (!(n.topic_id in order)) order[n.topic_id] = oi++;
   const topics = d.topics.slice().sort((a, b) => (order[a.id] ?? 99) - (order[b.id] ?? 99));
-  const sig = JSON.stringify([topics.map(t => [t.id, t.node_ids.length]), graphAll]);
+  const colOf = {}; topics.forEach((t, i) => colOf[t.id] = TCOLORS[i % TCOLORS.length]);
+  const sig = JSON.stringify([topics.map(t => [t.id, t.node_ids.length]), graphAll, focusT]);
   if (sig === lastSig) return; lastSig = sig;
+  const els = [], cap = document.getElementById('graphCap');
 
-  // fold the long tail of small topics into one "smaller topics" lane unless expanded
-  const MAX = 8, merge = {}, colOf = {};
-  topics.forEach((t, i) => colOf[t.id] = TCOLORS[i % TCOLORS.length]);
-  let lanesT;
-  if (!graphAll && topics.length > MAX) {
-    const big = new Set(topics.slice().sort((a, b) => b.node_ids.length - a.node_ids.length).slice(0, MAX).map(t => t.id));
-    const major = topics.filter(t => big.has(t.id)), minor = topics.filter(t => !big.has(t.id));
-    minor.forEach(t => merge[t.id] = '__minor__');
-    const mseg = minor.flatMap(t => t.node_ids);
-    lanesT = major.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
-    lanesT.push({ id: '__minor__', minor: true, label: '+ ' + minor.length + ' smaller topics (' + mseg.length + ' segs) — tap to split' });
-  } else if (graphAll && topics.length > MAX) {
-    lanesT = [{ id: '__combine__', combine: true, label: '← combine small topics' },
-              ...topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }))];
+  if (focusT && topics.some(t => t.id === focusT)) {
+    // FOCUS one topic: its moments as a readable vertical list, in time order, every line labelled (no overlap)
+    const t = topics.find(x => x.id === focusT);
+    const tn = d.nodes.filter(n => n.topic_id === focusT);
+    els.push({ data: { id: 'lane___back', back: true, label: '← all topics' }, classes: 'lane ctl', position: { x: 92, y: 44 } });
+    els.push({ data: { id: 'lane_' + t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }, classes: 'lane', position: { x: 92, y: 120 } });
+    tn.forEach((n, i) => {
+      const txt = (n.text || '').length > 84 ? n.text.slice(0, 82) + '…' : (n.text || '');
+      els.push({ data: { id: n.id, kind: n.kind, label: n.speaker + ': ' + txt }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : '') + ' row',
+                 position: { x: 300, y: 188 + i * 30 } });
+    });
+    cap.textContent = 'one topic, in time order — tap a moment to read it · tap “← all topics” to go back';
   } else {
-    lanesT = topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
+    // OVERVIEW: topic lanes (y) × time (x), CLEAN dots (per-moment labels collide, so none here); long meetings group small topics
+    const MAX = 8, merge = {};
+    let lanesT;
+    if (!graphAll && topics.length > MAX) {
+      const big = new Set(topics.slice().sort((a, b) => b.node_ids.length - a.node_ids.length).slice(0, MAX).map(t => t.id));
+      const major = topics.filter(t => big.has(t.id)), minor = topics.filter(t => !big.has(t.id));
+      minor.forEach(t => merge[t.id] = '__minor__');
+      const mseg = minor.flatMap(t => t.node_ids);
+      lanesT = major.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
+      lanesT.push({ id: '__minor__', minor: true, label: '+ ' + minor.length + ' smaller topics (' + mseg.length + ' segs) — tap to split' });
+    } else if (graphAll && topics.length > MAX) {
+      lanesT = [{ id: '__combine__', combine: true, label: '← combine small topics' },
+                ...topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }))];
+    } else {
+      lanesT = topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
+    }
+    const lane = {}; lanesT.forEach((t, i) => lane[t.id] = i);
+    const LANE_H = Math.max(46, Math.min(92, 660 / lanesT.length));
+    const X0 = 230, PLOT_W = 1500, XSTEP = Math.max(2.2, Math.min(40, PLOT_W / Math.max(1, d.nodes.length)));  // time axis
+    lanesT.forEach((t, i) => els.push({
+      data: { id: 'lane_' + t.id, tid: t.tid, tlabel: t.tlabel, minor: !!t.minor, combine: !!t.combine, label: t.label, col: t.col || '#15171f' },
+      classes: 'lane' + ((t.minor || t.combine) ? ' ctl' : ''), position: { x: 92, y: i * LANE_H + LANE_H / 2 } }));
+    d.nodes.forEach((n, i) => {
+      const ly = lane[merge[n.topic_id] || n.topic_id]; if (ly === undefined) return;
+      els.push({ data: { id: n.id, kind: n.kind }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : ''),
+                 position: { x: X0 + i * XSTEP, y: ly * LANE_H + LANE_H / 2 } });
+    });
+    cap.textContent = 'rows = topics · left → right = time · tap a topic to open its moments, a dot to read one'
+      + (topics.length > MAX ? ' · small topics grouped — tap to split' : '');
   }
-  const lane = {}; lanesT.forEach((t, i) => lane[t.id] = i);
-  const LANE_H = Math.max(46, Math.min(92, 660 / lanesT.length));
-  const X0 = 230, PLOT_W = 1500;  // fixed plot width so lane labels stay readable regardless of length
-  const XSTEP = Math.max(2.2, Math.min(40, PLOT_W / Math.max(1, d.nodes.length)));  // time axis
-  const els = [];
-  lanesT.forEach((t, i) => els.push({
-    data: { id: 'lane_' + t.id, tid: t.tid, tlabel: t.tlabel, minor: !!t.minor, combine: !!t.combine, label: t.label, col: t.col || '#15171f' },
-    classes: 'lane' + ((t.minor || t.combine) ? ' ctl' : ''), position: { x: 92, y: i * LANE_H + LANE_H / 2 } }));
-  d.nodes.forEach((n, i) => {
-    const ly = lane[merge[n.topic_id] || n.topic_id]; if (ly === undefined) return;
-    const notable = good.has(n.id) || n.kind === 'decision' || n.kind === 'action_item';  // anchors worth labelling
-    const lbl = notable ? ((n.text || '').length > 46 ? n.text.slice(0, 44) + '…' : (n.text || '')) : '';
-    els.push({ data: { id: n.id, kind: n.kind, label: lbl }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : '') + (notable ? ' lbl' : ''),
-               position: { x: X0 + i * XSTEP, y: ly * LANE_H + LANE_H / 2 } });
-  });
   cy.json({ elements: els });
   cy.layout({ name: 'preset' }).run();
   cy.fit(undefined, 24);
-  document.getElementById('graphCap').textContent = 'rows = topics · left → right = time · tap a topic to recap, a dot to read it'
-    + (topics.length > MAX ? ' · small topics grouped — tap that lane to split' : '');
 }
 function showNode(id) {
   const n = nodeMap[id]; if (!n) return;
