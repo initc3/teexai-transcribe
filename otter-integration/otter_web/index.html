@@ -253,7 +253,7 @@
 </div>
 
 <script>
-const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 // ---------- access model: owner / view / public ----------
 let ownerToken = null, viewMode = null;  // viewMode = {otid, sig}
