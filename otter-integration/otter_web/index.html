@@ -268,7 +268,7 @@ let ownerToken = null, viewMode = null;  // viewMode = {otid, sig}
   } else {
     ownerToken = localStorage.getItem('otter_owner_token');
   }
-  if (h) history.replaceState(null, '', location.pathname + location.search);
+  if (h.startsWith('#owner=')) history.replaceState(null, '', location.pathname + location.search);  // hide the token only; keep #c=/#view so a refresh restores your place
 })();
 // the app may be mounted under a prefix on the CVM (e.g. /otter/), so resolve API/asset
 // paths relative to the page dir instead of the server root.
@@ -386,6 +386,7 @@ hdrImport.onclick = () => {
 // ---------- conversations list ----------
 async function loadList() {
   cur = null; clearTimers();
+  if (!viewMode && location.hash.indexOf('c=') !== -1) history.replaceState(null, '', location.pathname + location.search);
   listEl.classList.add('show'); mainEl.classList.add('hide');
   back.style.display = 'none'; btn.style.display = 'none'; win.style.display = 'none'; meet.textContent = '';
   home.textContent = 'Otter Copilot';
@@ -445,6 +446,7 @@ async function shareLink(otid, el) {
 // ---------- open a conversation ----------
 function open(otid, live) {
   cur = { otid, live }; clearTimers();
+  if (!viewMode) history.replaceState(null, '', '#c=' + encodeURIComponent(otid));  // keep the open meeting in the URL across refresh
   listEl.classList.remove('show'); mainEl.classList.remove('hide');
   liveBar.classList.remove('show');
   back.style.display = viewMode ? 'none' : 'inline-block';
@@ -460,6 +462,14 @@ function open(otid, live) {
 }
 back.onclick = loadList;
 home.onclick = () => { if (!viewMode) loadList(); };
+async function openHash(otid) {  // restore the meeting named in #c= on refresh, resuming live-follow if it's live
+  try {
+    const cs = await (await api('/conversations')).json();
+    const c = Array.isArray(cs) && cs.find(x => x.otid === otid);
+    if (!c) { loadList(); return; }
+    open(otid, !!c.live);
+  } catch (e) { loadList(); }
+}
 
 // ---------- stored (past) conversation ----------
 async function loadStored(otid, sig) {
@@ -896,7 +906,7 @@ function viewLanding() {
 // ---------- boot dispatch ----------
 renderIdentity();
 if (viewMode) viewLanding();
-else if (ownerToken) loadList();
+else if (ownerToken) { const _cm = location.hash.match(/[#&]c=([^&]+)/); _cm ? openHash(decodeURIComponent(_cm[1])) : loadList(); }
 else guestLanding();
 </script>
 </body>
