@@ -616,7 +616,7 @@ let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false
 function ensureCy() {
   if (cy) return cy;
   cy = cytoscape({ container: document.getElementById('cy'),
-    wheelSensitivity: 0.08, minZoom: 0.25, maxZoom: 2.5,
+    wheelSensitivity: 0.08, minZoom: 0.25, maxZoom: 4,
     style: [
       { selector: 'node.lane', css: {
           'shape': 'round-rectangle', 'label': 'data(label)', 'background-color': 'data(col)',
@@ -678,7 +678,8 @@ function renderGraph(d) {
   }
   const lane = {}; lanesT.forEach((t, i) => lane[t.id] = i);
   const LANE_H = Math.max(46, Math.min(92, 660 / lanesT.length));
-  const X0 = 230, XSTEP = Math.max(11, Math.min(42, 1000 / Math.max(1, d.nodes.length)));  // time axis
+  const X0 = 230, PLOT_W = 1500;  // fixed plot width so lane labels stay readable regardless of length
+  const XSTEP = Math.max(2.2, Math.min(40, PLOT_W / Math.max(1, d.nodes.length)));  // time axis
   const els = [];
   lanesT.forEach((t, i) => els.push({
     data: { id: 'lane_' + t.id, tid: t.tid, tlabel: t.tlabel, minor: !!t.minor, combine: !!t.combine, label: t.label, col: t.col || '#15171f' },
