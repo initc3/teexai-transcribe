@@ -11,7 +11,7 @@ is the whole audit surface between the local run and the hosted/pod run.
 import os
 import requests
 
-BASE = "https://otter.ai/forward/api/v1/"
+BASE = os.environ.get("OTTER_API_BASE", "https://otter.ai/forward/api/v1/")
 
 
 def _cookies():
@@ -25,12 +25,15 @@ def _cookies():
     raise ValueError(f"OTTER_SESSION must be chrome|sealed, got {mode!r}")
 
 
-def open_session():
-    c = _cookies()
+def open_session(cookies=None):
+    """Open a session. `cookies` (sessionid+csrftoken) lets a caller validate a specific
+    user's login (e.g. onboarding a per-user cookie); None uses the env/chrome mode above."""
+    c = cookies or _cookies()
     s = requests.Session()
     s.cookies.update(c)
     s.headers.update({"referer": "https://otter.ai/", "user-agent": "Mozilla/5.0"})
-    s.uid = s.get(BASE + "user", timeout=30).json()["userid"]
+    s.user = s.get(BASE + "user", timeout=30).json()  # raises/KeyErrors if the cookie is dead
+    s.uid = s.user["userid"]
     s.csrf = c["csrftoken"]
     s.media = c  # api.aisense.com assets need sessionid+csrftoken sent explicitly (cross-domain)
     return s
