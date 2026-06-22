@@ -134,7 +134,19 @@
   .tab { background: #15171f; color: #9aa0ad; font-weight: 600; padding: 6px 12px; font-size: 13px; }
   .tab.active { background: #1f2330; color: #cdd2da; }
   #graphWrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  #cy { flex: 1; min-height: 0; }
+  #cy { flex: 1; min-height: 0; overflow: auto; }
+  .tlrow { display: flex; }
+  .tllabel { position: sticky; left: 0; z-index: 2; flex: 0 0 170px; min-height: 54px; padding: 7px 10px; font-size: 11px; font-weight: 700; color: #10131c; display: flex; flex-direction: column; justify-content: center; cursor: pointer; box-shadow: 2px 0 0 #0b0c10; }
+  .tllabel .sub { font-weight: 500; font-size: 10px; opacity: .85; margin-top: 2px; }
+  .tllabel.ctl { background: #15171f !important; color: #9aa0ad; font-weight: 600; }
+  .tllane { position: relative; height: 54px; flex: 0 0 auto; border-bottom: 1px solid #14161d; }
+  .tldot { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #8a8f9c; cursor: pointer; }
+  .tldot.question { background: #4a90d9; }
+  .tldot.decision { background: #2bb673; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #0d0f16; }
+  .tldot.action_item { background: #2bb673; border-radius: 2px; }
+  .tldot.divergence { background: #c0524a; }
+  .tldot.good { box-shadow: 0 0 0 3px #ff5ea8; }
+  .tldot:hover { outline: 2px solid #cdd2da; z-index: 3; }
   #graphCap { border-top: 1px solid #16181f; padding: 8px 16px; background: #0d0f16; font-size: 11px; color: #9aa0ad; }
   #flow { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #cyflow { flex: 1; min-height: 0; }
@@ -666,64 +678,66 @@ function laneLabel(t, d, good, decs) {
   const parts = [t.node_ids.length + ' segs']; if (nD) parts.push('🟢' + nD); if (nG) parts.push('✨' + nG);
   return t.label + '\n(' + parts.join(' ') + ')';
 }
+function laneSub(t, d, good, decs) {
+  const tn = d.nodes.filter(n => n.topic_id === t.id);
+  const nG = tn.filter(n => good.has(n.id)).length, nD = tn.filter(n => decs.has(n.id)).length;
+  const parts = [t.node_ids.length + ' segs']; if (nD) parts.push('🟢' + nD); if (nG) parts.push('✨' + nG);
+  return parts.join(' ');
+}
+// HTML grid: topic labels are a FROZEN sticky left column; the dot timeline scrolls horizontally.
 function renderGraph(d) {
-  ensureCy();
+  const cyEl = document.getElementById('cy');
   const good = new Set(d.good || []), decs = new Set(d.decisions || []);
   nodeMap = {}; d.nodes.forEach(n => nodeMap[n.id] = n);
   const order = {}; let oi = 0;
   for (const n of d.nodes) if (!(n.topic_id in order)) order[n.topic_id] = oi++;
   const topics = d.topics.slice().sort((a, b) => (order[a.id] ?? 99) - (order[b.id] ?? 99));
   const colOf = {}; topics.forEach((t, i) => colOf[t.id] = TCOLORS[i % TCOLORS.length]);
-  const sig = JSON.stringify([topics.map(t => [t.id, t.node_ids.length]), graphAll, focusT]);
+  const sig = JSON.stringify([topics.map(t => [t.id, t.node_ids.length]), graphAll]);
   if (sig === lastSig) return; lastSig = sig;
-  const els = [], cap = document.getElementById('graphCap');
 
-  if (focusT && topics.some(t => t.id === focusT)) {
-    // FOCUS one topic: its moments as a readable vertical list, in time order, every line labelled (no overlap)
-    const t = topics.find(x => x.id === focusT);
-    const tn = d.nodes.filter(n => n.topic_id === focusT);
-    els.push({ data: { id: 'lane___back', back: true, label: '← all topics' }, classes: 'lane ctl', position: { x: 92, y: 44 } });
-    els.push({ data: { id: 'lane_' + t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }, classes: 'lane', position: { x: 92, y: 120 } });
-    tn.forEach((n, i) => {
-      const txt = (n.text || '').length > 84 ? n.text.slice(0, 82) + '…' : (n.text || '');
-      els.push({ data: { id: n.id, kind: n.kind, label: n.speaker + ': ' + txt }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : '') + ' row',
-                 position: { x: 300, y: 188 + i * 30 } });
-    });
-    cap.textContent = 'one topic, in time order — tap a moment to read it · tap “← all topics” to go back';
+  const MAX = 8, merge = {};
+  let lanesT;
+  if (!graphAll && topics.length > MAX) {
+    const big = new Set(topics.slice().sort((a, b) => b.node_ids.length - a.node_ids.length).slice(0, MAX).map(t => t.id));
+    const major = topics.filter(t => big.has(t.id)), minor = topics.filter(t => !big.has(t.id));
+    minor.forEach(t => merge[t.id] = '__minor__');
+    const mseg = minor.flatMap(t => t.node_ids);
+    lanesT = major.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, name: t.label, sub: laneSub(t, d, good, decs), col: colOf[t.id] }));
+    lanesT.push({ id: '__minor__', minor: true, name: '+ ' + minor.length + ' smaller topics', sub: mseg.length + ' segs — tap to split' });
+  } else if (graphAll && topics.length > MAX) {
+    lanesT = [{ id: '__combine__', combine: true, name: '← combine small topics', sub: '' },
+              ...topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, name: t.label, sub: laneSub(t, d, good, decs), col: colOf[t.id] }))];
   } else {
-    // OVERVIEW: topic lanes (y) × time (x), CLEAN dots (per-moment labels collide, so none here); long meetings group small topics
-    const MAX = 8, merge = {};
-    let lanesT;
-    if (!graphAll && topics.length > MAX) {
-      const big = new Set(topics.slice().sort((a, b) => b.node_ids.length - a.node_ids.length).slice(0, MAX).map(t => t.id));
-      const major = topics.filter(t => big.has(t.id)), minor = topics.filter(t => !big.has(t.id));
-      minor.forEach(t => merge[t.id] = '__minor__');
-      const mseg = minor.flatMap(t => t.node_ids);
-      lanesT = major.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
-      lanesT.push({ id: '__minor__', minor: true, label: '+ ' + minor.length + ' smaller topics (' + mseg.length + ' segs) — tap to split' });
-    } else if (graphAll && topics.length > MAX) {
-      lanesT = [{ id: '__combine__', combine: true, label: '← combine small topics' },
-                ...topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }))];
-    } else {
-      lanesT = topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
-    }
-    const lane = {}; lanesT.forEach((t, i) => lane[t.id] = i);
-    const LANE_H = Math.max(46, Math.min(92, 660 / lanesT.length));
-    const X0 = 230, PLOT_W = 1500, XSTEP = Math.max(2.2, Math.min(40, PLOT_W / Math.max(1, d.nodes.length)));  // time axis
-    lanesT.forEach((t, i) => els.push({
-      data: { id: 'lane_' + t.id, tid: t.tid, tlabel: t.tlabel, minor: !!t.minor, combine: !!t.combine, label: t.label, col: t.col || '#15171f' },
-      classes: 'lane' + ((t.minor || t.combine) ? ' ctl' : ''), position: { x: 92, y: i * LANE_H + LANE_H / 2 } }));
-    d.nodes.forEach((n, i) => {
-      const ly = lane[merge[n.topic_id] || n.topic_id]; if (ly === undefined) return;
-      els.push({ data: { id: n.id, kind: n.kind }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : ''),
-                 position: { x: X0 + i * XSTEP, y: ly * LANE_H + LANE_H / 2 } });
-    });
-    cap.textContent = 'rows = topics · left → right = time · tap a topic to open its moments, a dot to read one'
-      + (topics.length > MAX ? ' · small topics grouped — tap to split' : '');
+    lanesT = topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, name: t.label, sub: laneSub(t, d, good, decs), col: colOf[t.id] }));
   }
-  cy.json({ elements: els });
-  cy.layout({ name: 'preset' }).run();
-  cy.fit(undefined, 24);
+  const total = Math.max(1, d.nodes.length);
+  const TW = Math.max(1100, Math.min(8000, total * 9));  // timeline width (px) — scroll horizontally for later in the meeting
+  const dots = {}; lanesT.forEach(t => dots[t.id] = []);
+  d.nodes.forEach((n, i) => {
+    const lid = merge[n.topic_id] || n.topic_id; if (!(lid in dots)) return;
+    const left = (i / total * TW).toFixed(0);
+    const title = esc(n.speaker + ': ' + (n.text || '')).replace(/"/g, '&quot;');
+    dots[lid].push('<span class="tldot ' + n.kind + (good.has(n.id) ? ' good' : '') + '" style="left:' + left + 'px" data-id="' + n.id + '" title="' + title + '"></span>');
+  });
+  let html = '';
+  lanesT.forEach(t => {
+    const ctl = t.minor || t.combine;
+    html += '<div class="tlrow"><div class="tllabel' + (ctl ? ' ctl' : '') + '" style="' + (ctl ? '' : 'background:' + t.col) + '"'
+      + ' data-tid="' + (t.tid || '') + '" data-minor="' + (t.minor ? 1 : 0) + '" data-combine="' + (t.combine ? 1 : 0) + '" data-tlabel="' + esc(t.tlabel || '').replace(/"/g, '&quot;') + '">'
+      + esc(t.name) + '<span class="sub">' + esc(t.sub) + '</span></div>'
+      + '<div class="tllane" style="width:' + TW + 'px">' + (dots[t.id] || []).join('') + '</div></div>';
+  });
+  cyEl.innerHTML = html;
+  cyEl.onclick = (e) => {
+    const dot = e.target.closest('.tldot'); if (dot) { showNode(dot.dataset.id); return; }
+    const lab = e.target.closest('.tllabel'); if (!lab) return;
+    if (lab.dataset.minor === '1') { graphAll = true; lastSig = ''; renderGraph(lastGraph); }
+    else if (lab.dataset.combine === '1') { graphAll = false; lastSig = ''; renderGraph(lastGraph); }
+    else if (lab.dataset.tid) clusterRecap(lab.dataset.tid, lab.dataset.tlabel);
+  };
+  document.getElementById('graphCap').textContent = 'topics frozen on the left · scroll right = later in the meeting · hover a dot for its phrase, tap to read · tap a topic to recap'
+    + (topics.length > MAX ? ' · small topics grouped — tap to split' : '');
 }
 function showNode(id) {
   const n = nodeMap[id]; if (!n) return;
@@ -862,7 +876,7 @@ function switchView(v) {
   tabFeed.classList.toggle('active', v === 'feed');
   tabGraph.classList.toggle('active', graphVisible);
   tabFlow.classList.toggle('active', flowV);
-  if (graphVisible && lastGraph) { ensureCy(); cy.resize(); lastSig = ''; renderGraph(lastGraph); }
+  if (graphVisible && lastGraph) { lastSig = ''; renderGraph(lastGraph); }
   if (flowV) { ensureCyflow(); cyflow.resize(); if (!flowLoaded) loadFlow(); else cyflow.fit(undefined, 30); }
 }
 tabFeed.onclick = () => switchView('feed');
