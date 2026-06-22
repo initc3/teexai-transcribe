@@ -615,80 +615,58 @@ async function poll() {
 let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastSig = '', lastCorrectSig = '', expanded = null;
 function ensureCy() {
   if (cy) return cy;
-  cy = cytoscape({ container: document.getElementById('cy'), wheelSensitivity: 0.2,
+  cy = cytoscape({ container: document.getElementById('cy'),
+    wheelSensitivity: 0.08, minZoom: 0.25, maxZoom: 2.5,
     style: [
-      { selector: 'node.topic', css: {
-          'shape': 'roundrectangle', 'label': 'data(label)', 'background-color': 'data(col)',
-          'background-opacity': 0.95, 'border-width': 2, 'border-color': '#0d0f16',
-          'color': '#10131c', 'font-size': '13px', 'font-weight': 'bold',
-          'text-wrap': 'wrap', 'text-max-width': 'data(tw)', 'text-valign': 'center', 'text-halign': 'center',
-          'width': 'data(w)', 'height': 'data(h)', 'padding': '8px' } },
-      { selector: 'node.topic.hasmark', css: { 'border-width': 3, 'border-color': '#ff5ea8' } },
-      { selector: 'node.topic.sel', css: { 'border-width': 3, 'border-color': '#cdd2da' } },
-      { selector: 'node.seg', css: {
-          'label': 'data(label)', 'color': '#cdd2da', 'font-size': '11px', 'text-wrap': 'wrap',
-          'text-max-width': '150px', 'text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 4,
-          'background-color': '#8a8f9c', 'width': 12, 'height': 12 } },
+      { selector: 'node.lane', css: {
+          'shape': 'round-rectangle', 'label': 'data(label)', 'background-color': 'data(col)',
+          'background-opacity': 0.92, 'color': '#10131c', 'font-size': '11px', 'font-weight': 'bold',
+          'text-wrap': 'wrap', 'text-max-width': '150px', 'text-valign': 'center', 'text-halign': 'center',
+          'width': 168, 'height': 56, 'padding': '6px' } },
+      { selector: 'node.seg', css: { 'background-color': '#8a8f9c', 'width': 11, 'height': 11, 'label': '' } },
       { selector: 'node.seg.question', css: { 'background-color': '#4a90d9' } },
-      { selector: 'node.seg.decision', css: { 'background-color': '#2bb673', 'width': 15, 'height': 15 } },
-      { selector: 'node.seg.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 15, 'height': 15 } },
+      { selector: 'node.seg.decision', css: { 'background-color': '#2bb673', 'width': 17, 'height': 17, 'border-width': 2, 'border-color': '#0d0f16' } },
+      { selector: 'node.seg.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 17, 'height': 17 } },
       { selector: 'node.seg.divergence', css: { 'background-color': '#c0524a' } },
-      { selector: 'node.seg.good', css: { 'border-width': 2, 'border-color': '#ff5ea8' } },
-      { selector: 'edge', css: { 'width': 2, 'line-color': '#3a4150', 'target-arrow-color': '#3a4150', 'target-arrow-shape': 'triangle', 'arrow-scale': 0.9, 'curve-style': 'bezier' } },
-      { selector: 'edge.segedge', css: { 'width': 1, 'line-color': '#2a2e3b', 'target-arrow-shape': 'none' } },
+      { selector: 'node.seg.good', css: { 'border-width': 3, 'border-color': '#ff5ea8' } },
+      { selector: 'node:selected', css: { 'border-width': 3, 'border-color': '#cdd2da' } },
+      { selector: 'edge', css: { 'width': 1, 'line-color': '#23283a', 'curve-style': 'bezier', 'target-arrow-shape': 'none', 'opacity': 0.45 } },
     ] });
-  cy.on('tap', 'node.topic', e => { clusterRecap(e.target.id(), e.target.data('label')); toggleExpand(e.target.id()); });
+  cy.on('tap', 'node.lane', e => clusterRecap(e.target.data('tid'), e.target.data('tlabel')));
   cy.on('tap', 'node.seg', e => showNode(e.target.id()));
   return cy;
 }
 const TCOLORS = ['#c9a227', '#4a90d9', '#2bb673', '#c0524a', '#9b59b6', '#e67e22', '#1ab9c4', '#d96fb0', '#7f8c5a', '#5d6d9e'];
-function toggleExpand(tid) { expanded = (expanded === tid) ? null : tid; lastSig = ''; renderGraph(lastGraph); }
 function renderGraph(d) {
   ensureCy();
   const good = new Set(d.good || []), decs = new Set(d.decisions || []);
-  // order topics by first appearance in the transcript
+  nodeMap = {}; d.nodes.forEach(n => nodeMap[n.id] = n);
+  // topics become horizontal lanes (vertical axis), ordered by first appearance
   const order = {}; let oi = 0;
   for (const n of d.nodes) if (!(n.topic_id in order)) order[n.topic_id] = oi++;
   const topics = d.topics.slice().sort((a, b) => (order[a.id] ?? 99) - (order[b.id] ?? 99));
-  const sig = JSON.stringify([topics.map(t => [t.id, t.node_ids.length]), expanded]);
+  const sig = JSON.stringify(topics.map(t => [t.id, t.node_ids.length]));
   if (sig === lastSig) return; lastSig = sig;
-
+  const lane = {}; topics.forEach((t, i) => lane[t.id] = i);
+  const LANE_H = 84, X0 = 230;
+  const XSTEP = Math.max(11, Math.min(42, 1000 / Math.max(1, d.nodes.length)));  // time axis
   const els = [];
-  const idx = {}; topics.forEach((t, i) => idx[t.id] = i);
-  // in expanded mode show only the selected topic; otherwise the whole map
-  const shown = expanded ? topics.filter(t => t.id === expanded) : topics;
-  for (const t of shown) {
-    const i = idx[t.id];
-    const tnodes = d.nodes.filter(n => n.topic_id === t.id);
-    const nGood = tnodes.filter(n => good.has(n.id)).length;
-    const nDec = tnodes.filter(n => decs.has(n.id)).length;
-    const cnt = t.node_ids.length;
-    const w = Math.round(Math.min(230, 150 + cnt * 1.6)), h = Math.round(Math.min(150, 80 + cnt * 1.4));
-    const parts = [cnt + ' segs']; if (nDec) parts.push('🟢' + nDec); if (nGood) parts.push('✨' + nGood);
-    const label = t.label + '\n(' + parts.join('  ') + ')';
-    els.push({ data: { id: t.id, label, col: TCOLORS[i % TCOLORS.length], w, h, tw: w - 20, cnt, deg: 1 }, classes: 'topic' + ((nGood || nDec) ? ' hasmark' : '') + (expanded === t.id ? ' sel' : '') });
-  }
-  if (!expanded) {
-    // topic-to-topic flow edges, by first-appearance order
-    for (let i = 1; i < topics.length; i++)
-      els.push({ data: { id: 'te_' + topics[i - 1].id + '_' + topics[i].id, source: topics[i - 1].id, target: topics[i].id } });
-  } else {
-    // selected topic in the center, its segments in a concentric ring around it
-    for (const n of d.nodes.filter(n => n.topic_id === expanded)) {
-      const txt = (n.text || '').length > 64 ? n.text.slice(0, 61) + '…' : n.text;
-      els.push({ data: { id: n.id, kind: n.kind, label: n.speaker + ': ' + txt, deg: 0 }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : '') });
-      els.push({ data: { id: 'se_' + expanded + '_' + n.id, source: expanded, target: n.id }, classes: 'segedge' });
-    }
-  }
+  topics.forEach((t, i) => {
+    const tn = d.nodes.filter(n => n.topic_id === t.id);
+    const nGood = tn.filter(n => good.has(n.id)).length, nDec = tn.filter(n => decs.has(n.id)).length;
+    const parts = [t.node_ids.length + ' segs']; if (nDec) parts.push('🟢' + nDec); if (nGood) parts.push('✨' + nGood);
+    els.push({ data: { id: 'lane_' + t.id, tid: t.id, tlabel: t.label, label: t.label + '\n(' + parts.join(' ') + ')', col: TCOLORS[i % TCOLORS.length] },
+               classes: 'lane', position: { x: 92, y: i * LANE_H + LANE_H / 2 } });
+  });
+  // each moment placed by time (x = transcript order) within its topic lane (y)
+  d.nodes.forEach((n, i) => {
+    els.push({ data: { id: n.id, kind: n.kind }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : ''),
+               position: { x: X0 + i * XSTEP, y: (lane[n.topic_id] ?? 0) * LANE_H + LANE_H / 2 } });
+  });
   cy.json({ elements: els });
-  const lay = expanded
-    ? { name: 'concentric', concentric: n => n.data('deg'), levelWidth: () => 1, minNodeSpacing: 18, padding: 40, spacingFactor: 1.1 }
-    : { name: 'cose', animate: false, randomize: true, padding: 50, nodeRepulsion: () => 400000, idealEdgeLength: () => 150, edgeElasticity: () => 40, gravity: 1.2, numIter: 1500, componentSpacing: 120, nodeOverlap: 40, coolingFactor: 0.95, initialTemp: 250 };
-  cy.layout(lay).run();
-  cy.fit(undefined, 30);
-  document.getElementById('graphCap').textContent = expanded
-    ? 'showing one thread — tap a moment to read it; tap the centre topic to return to the map.'
-    : 'topics in this meeting — tap one to recap that thread; tap again to expand its moments.';
+  cy.layout({ name: 'preset' }).run();
+  cy.fit(undefined, 24);
+  document.getElementById('graphCap').textContent = 'rows = topics · left → right = time · tap a topic to recap it, tap a dot to read that moment.';
 }
 function showNode(id) {
   const n = nodeMap[id]; if (!n) return;
