@@ -612,7 +612,7 @@ async function poll() {
 }
 
 // ---------- graph (shared by live + stored) ----------
-let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastSig = '', lastCorrectSig = '', expanded = null;
+let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastSig = '', lastCorrectSig = '', expanded = null, graphAll = false;
 function ensureCy() {
   if (cy) return cy;
   cy = cytoscape({ container: document.getElementById('cy'),
@@ -623,6 +623,7 @@ function ensureCy() {
           'background-opacity': 0.92, 'color': '#10131c', 'font-size': '11px', 'font-weight': 'bold',
           'text-wrap': 'wrap', 'text-max-width': '150px', 'text-valign': 'center', 'text-halign': 'center',
           'width': 168, 'height': 56, 'padding': '6px' } },
+      { selector: 'node.lane.ctl', css: { 'background-color': '#15171f', 'color': '#9aa0ad', 'border-width': 1, 'border-color': '#3a4150', 'font-weight': 'normal' } },
       { selector: 'node.seg', css: { 'background-color': '#8a8f9c', 'width': 11, 'height': 11, 'label': '' } },
       { selector: 'node.seg.question', css: { 'background-color': '#4a90d9' } },
       { selector: 'node.seg.decision', css: { 'background-color': '#2bb673', 'width': 17, 'height': 17, 'border-width': 2, 'border-color': '#0d0f16' } },
@@ -632,41 +633,66 @@ function ensureCy() {
       { selector: 'node:selected', css: { 'border-width': 3, 'border-color': '#cdd2da' } },
       { selector: 'edge', css: { 'width': 1, 'line-color': '#23283a', 'curve-style': 'bezier', 'target-arrow-shape': 'none', 'opacity': 0.45 } },
     ] });
-  cy.on('tap', 'node.lane', e => clusterRecap(e.target.data('tid'), e.target.data('tlabel')));
+  cy.on('tap', 'node.lane', e => {
+    const dt = e.target.data();
+    if (dt.minor) { graphAll = true; lastSig = ''; renderGraph(lastGraph); }
+    else if (dt.combine) { graphAll = false; lastSig = ''; renderGraph(lastGraph); }
+    else clusterRecap(dt.tid, dt.tlabel);
+  });
   cy.on('tap', 'node.seg', e => showNode(e.target.id()));
   return cy;
 }
 const TCOLORS = ['#c9a227', '#4a90d9', '#2bb673', '#c0524a', '#9b59b6', '#e67e22', '#1ab9c4', '#d96fb0', '#7f8c5a', '#5d6d9e'];
+function laneLabel(t, d, good, decs) {
+  const tn = d.nodes.filter(n => n.topic_id === t.id);
+  const nG = tn.filter(n => good.has(n.id)).length, nD = tn.filter(n => decs.has(n.id)).length;
+  const parts = [t.node_ids.length + ' segs']; if (nD) parts.push('🟢' + nD); if (nG) parts.push('✨' + nG);
+  return t.label + '\n(' + parts.join(' ') + ')';
+}
 function renderGraph(d) {
   ensureCy();
   const good = new Set(d.good || []), decs = new Set(d.decisions || []);
   nodeMap = {}; d.nodes.forEach(n => nodeMap[n.id] = n);
-  // topics become horizontal lanes (vertical axis), ordered by first appearance
   const order = {}; let oi = 0;
   for (const n of d.nodes) if (!(n.topic_id in order)) order[n.topic_id] = oi++;
   const topics = d.topics.slice().sort((a, b) => (order[a.id] ?? 99) - (order[b.id] ?? 99));
-  const sig = JSON.stringify(topics.map(t => [t.id, t.node_ids.length]));
+  const sig = JSON.stringify([topics.map(t => [t.id, t.node_ids.length]), graphAll]);
   if (sig === lastSig) return; lastSig = sig;
-  const lane = {}; topics.forEach((t, i) => lane[t.id] = i);
-  const LANE_H = 84, X0 = 230;
-  const XSTEP = Math.max(11, Math.min(42, 1000 / Math.max(1, d.nodes.length)));  // time axis
+
+  // fold the long tail of small topics into one "smaller topics" lane unless expanded
+  const MAX = 8, merge = {}, colOf = {};
+  topics.forEach((t, i) => colOf[t.id] = TCOLORS[i % TCOLORS.length]);
+  let lanesT;
+  if (!graphAll && topics.length > MAX) {
+    const big = new Set(topics.slice().sort((a, b) => b.node_ids.length - a.node_ids.length).slice(0, MAX).map(t => t.id));
+    const major = topics.filter(t => big.has(t.id)), minor = topics.filter(t => !big.has(t.id));
+    minor.forEach(t => merge[t.id] = '__minor__');
+    const mseg = minor.flatMap(t => t.node_ids);
+    lanesT = major.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
+    lanesT.push({ id: '__minor__', minor: true, label: '+ ' + minor.length + ' smaller topics (' + mseg.length + ' segs) — tap to split' });
+  } else if (graphAll && topics.length > MAX) {
+    lanesT = [{ id: '__combine__', combine: true, label: '← combine small topics' },
+              ...topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }))];
+  } else {
+    lanesT = topics.map(t => ({ id: t.id, tid: t.id, tlabel: t.label, label: laneLabel(t, d, good, decs), col: colOf[t.id] }));
+  }
+  const lane = {}; lanesT.forEach((t, i) => lane[t.id] = i);
+  const LANE_H = Math.max(46, Math.min(92, 660 / lanesT.length));
+  const X0 = 230, XSTEP = Math.max(11, Math.min(42, 1000 / Math.max(1, d.nodes.length)));  // time axis
   const els = [];
-  topics.forEach((t, i) => {
-    const tn = d.nodes.filter(n => n.topic_id === t.id);
-    const nGood = tn.filter(n => good.has(n.id)).length, nDec = tn.filter(n => decs.has(n.id)).length;
-    const parts = [t.node_ids.length + ' segs']; if (nDec) parts.push('🟢' + nDec); if (nGood) parts.push('✨' + nGood);
-    els.push({ data: { id: 'lane_' + t.id, tid: t.id, tlabel: t.label, label: t.label + '\n(' + parts.join(' ') + ')', col: TCOLORS[i % TCOLORS.length] },
-               classes: 'lane', position: { x: 92, y: i * LANE_H + LANE_H / 2 } });
-  });
-  // each moment placed by time (x = transcript order) within its topic lane (y)
+  lanesT.forEach((t, i) => els.push({
+    data: { id: 'lane_' + t.id, tid: t.tid, tlabel: t.tlabel, minor: !!t.minor, combine: !!t.combine, label: t.label, col: t.col || '#15171f' },
+    classes: 'lane' + ((t.minor || t.combine) ? ' ctl' : ''), position: { x: 92, y: i * LANE_H + LANE_H / 2 } }));
   d.nodes.forEach((n, i) => {
+    const ly = lane[merge[n.topic_id] || n.topic_id]; if (ly === undefined) return;
     els.push({ data: { id: n.id, kind: n.kind }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : ''),
-               position: { x: X0 + i * XSTEP, y: (lane[n.topic_id] ?? 0) * LANE_H + LANE_H / 2 } });
+               position: { x: X0 + i * XSTEP, y: ly * LANE_H + LANE_H / 2 } });
   });
   cy.json({ elements: els });
   cy.layout({ name: 'preset' }).run();
   cy.fit(undefined, 24);
-  document.getElementById('graphCap').textContent = 'rows = topics · left → right = time · tap a topic to recap it, tap a dot to read that moment.';
+  document.getElementById('graphCap').textContent = 'rows = topics · left → right = time · tap a topic to recap, a dot to read it'
+    + (topics.length > MAX ? ' · small topics grouped — tap that lane to split' : '');
 }
 function showNode(id) {
   const n = nodeMap[id]; if (!n) return;
