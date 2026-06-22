@@ -92,7 +92,7 @@
   .feed .u.mark.good { border-left-color: #ff5ea8; }
   .feed .u .tag { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; margin-left: 8px; color: #c9a227; }
   .feed .u.good .tag { color: #ff5ea8; }
-  .side { display: flex; flex-direction: column; min-height: 0; }
+  .side { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
   .side h3 { margin: 0; padding: 11px 18px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #c9a227; border-bottom: 1px solid #16181f; }
   #slides { padding: 10px 14px; border-bottom: 1px solid #16181f; display: none; flex: 0 0 auto; max-height: 38%; overflow-y: auto; }
   #slides.has { display: block; }
@@ -124,7 +124,7 @@
   #correct .arrow { color: #5f6b85; }
   #correct .fix { color: #c3c8d2; margin: 2px 0; }
   #correct .fix b { color: #c9a227; }
-  #out { padding: 16px 20px; overflow-y: auto; white-space: pre-wrap; font-size: 14.5px; line-height: 1.6; color: #e6e9ef; flex: 1; }
+  #out { padding: 16px 20px; white-space: pre-wrap; font-size: 14.5px; line-height: 1.6; color: #e6e9ef; flex: 0 0 auto; }
   #out .ph { color: #5f6470; }
   #out .when { color: #6b7080; font-size: 11px; margin-bottom: 10px; }
   .err { color: #c0524a; }
@@ -133,7 +133,9 @@
   .tabs { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #16181f; }
   .tab { background: #15171f; color: #9aa0ad; font-weight: 600; padding: 6px 12px; font-size: 13px; }
   .tab.active { background: #1f2330; color: #cdd2da; }
+  #graphWrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #cy { flex: 1; min-height: 0; }
+  #graphCap { border-top: 1px solid #16181f; padding: 8px 16px; background: #0d0f16; font-size: 11px; color: #9aa0ad; }
   #flow { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #cyflow { flex: 1; min-height: 0; }
   #flowFoot { border-top: 1px solid #16181f; padding: 9px 16px 11px; background: #0d0f16; }
@@ -221,7 +223,10 @@
       <button class="tab" id="tabFlow" style="display:none">workflow</button>
     </div>
     <div class="feed" id="feed"></div>
-    <div id="cy" style="display:none"></div>
+    <div id="graphWrap" style="display:none">
+      <div id="cy"></div>
+      <div id="graphCap">topics in this meeting — tap one to recap that thread; tap again to expand its moments.</div>
+    </div>
     <div id="flow" style="display:none">
       <div id="cyflow"></div>
       <div id="flowFoot">
@@ -443,7 +448,7 @@ function open(otid, live) {
   listEl.classList.remove('show'); mainEl.classList.remove('hide');
   liveBar.classList.remove('show');
   back.style.display = viewMode ? 'none' : 'inline-block';
-  after = 0; segs = []; lastSlide = ''; feed.innerHTML = '<span class="ph">loading transcript…</span>'; lastN = -1; gnodes = []; nodeMap = {}; lastCorrectSig = '';
+  after = 0; segs = []; lastSlide = ''; feed.innerHTML = '<span class="ph">loading transcript…</span>'; lastSig = ''; expanded = null; gnodes = []; nodeMap = {}; lastCorrectSig = '';
   correctEl.style.display = correctHdr.style.display = 'none';
   partyInit = false; goodSeen = new Set();
   out.innerHTML = '<span class="ph">loading…</span>';
@@ -607,37 +612,83 @@ async function poll() {
 }
 
 // ---------- graph (shared by live + stored) ----------
-let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastN = -1, lastCorrectSig = '';
+let cy = null, gnodes = [], nodeMap = {}, lastGraph = null, graphVisible = false, lastSig = '', lastCorrectSig = '', expanded = null;
 function ensureCy() {
   if (cy) return cy;
-  cy = cytoscape({ container: document.getElementById('cy'),
+  cy = cytoscape({ container: document.getElementById('cy'), wheelSensitivity: 0.2,
     style: [
-      { selector: 'node', css: { 'label': 'data(label)', 'color': '#cdd2da', 'font-size': '9px', 'text-wrap': 'wrap', 'text-max-width': '110px', 'background-color': '#8a8f9c', 'width': 13, 'height': 13 } },
-      { selector: 'node.topic', css: { 'shape': 'roundrectangle', 'background-color': '#c9a227', 'background-opacity': 0.07, 'border-width': 1, 'border-color': '#3a3f4d', 'color': '#c9a227', 'font-size': '11px', 'text-valign': 'top', 'padding': '10px' } },
-      { selector: 'node.question', css: { 'background-color': '#4a90d9' } },
-      { selector: 'node.decision', css: { 'background-color': '#2bb673', 'width': 16, 'height': 16 } },
-      { selector: 'node.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 16, 'height': 16 } },
-      { selector: 'node.divergence', css: { 'background-color': '#c0524a' } },
-      { selector: 'node.good', css: { 'border-width': 2, 'border-color': '#ff5ea8' } },
-      { selector: 'edge', css: { 'width': 1, 'line-color': '#2a2e3b', 'target-arrow-color': '#2a2e3b', 'target-arrow-shape': 'triangle', 'arrow-scale': 0.6, 'curve-style': 'bezier' } },
+      { selector: 'node.topic', css: {
+          'shape': 'roundrectangle', 'label': 'data(label)', 'background-color': 'data(col)',
+          'background-opacity': 0.95, 'border-width': 2, 'border-color': '#0d0f16',
+          'color': '#10131c', 'font-size': '13px', 'font-weight': 'bold',
+          'text-wrap': 'wrap', 'text-max-width': 'data(tw)', 'text-valign': 'center', 'text-halign': 'center',
+          'width': 'data(w)', 'height': 'data(h)', 'padding': '8px' } },
+      { selector: 'node.topic.hasmark', css: { 'border-width': 3, 'border-color': '#ff5ea8' } },
+      { selector: 'node.topic.sel', css: { 'border-width': 3, 'border-color': '#cdd2da' } },
+      { selector: 'node.seg', css: {
+          'label': 'data(label)', 'color': '#cdd2da', 'font-size': '11px', 'text-wrap': 'wrap',
+          'text-max-width': '150px', 'text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 4,
+          'background-color': '#8a8f9c', 'width': 12, 'height': 12 } },
+      { selector: 'node.seg.question', css: { 'background-color': '#4a90d9' } },
+      { selector: 'node.seg.decision', css: { 'background-color': '#2bb673', 'width': 15, 'height': 15 } },
+      { selector: 'node.seg.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 15, 'height': 15 } },
+      { selector: 'node.seg.divergence', css: { 'background-color': '#c0524a' } },
+      { selector: 'node.seg.good', css: { 'border-width': 2, 'border-color': '#ff5ea8' } },
+      { selector: 'edge', css: { 'width': 2, 'line-color': '#3a4150', 'target-arrow-color': '#3a4150', 'target-arrow-shape': 'triangle', 'arrow-scale': 0.9, 'curve-style': 'bezier' } },
+      { selector: 'edge.segedge', css: { 'width': 1, 'line-color': '#2a2e3b', 'target-arrow-shape': 'none' } },
     ] });
-  cy.on('tap', 'node.topic', e => clusterRecap(e.target.id(), e.target.data('label')));
-  cy.on('tap', 'node[kind]', e => showNode(e.target.id()));
+  cy.on('tap', 'node.topic', e => { clusterRecap(e.target.id(), e.target.data('label')); toggleExpand(e.target.id()); });
+  cy.on('tap', 'node.seg', e => showNode(e.target.id()));
   return cy;
 }
+const TCOLORS = ['#c9a227', '#4a90d9', '#2bb673', '#c0524a', '#9b59b6', '#e67e22', '#1ab9c4', '#d96fb0', '#7f8c5a', '#5d6d9e'];
+function toggleExpand(tid) { expanded = (expanded === tid) ? null : tid; lastSig = ''; renderGraph(lastGraph); }
 function renderGraph(d) {
   ensureCy();
-  const good = new Set(d.good || []);
+  const good = new Set(d.good || []), decs = new Set(d.decisions || []);
+  // order topics by first appearance in the transcript
+  const order = {}; let oi = 0;
+  for (const n of d.nodes) if (!(n.topic_id in order)) order[n.topic_id] = oi++;
+  const topics = d.topics.slice().sort((a, b) => (order[a.id] ?? 99) - (order[b.id] ?? 99));
+  const sig = JSON.stringify([topics.map(t => [t.id, t.node_ids.length]), expanded]);
+  if (sig === lastSig) return; lastSig = sig;
+
   const els = [];
-  for (const t of d.topics) els.push({ data: { id: t.id, label: t.label }, classes: 'topic' });
-  let prev = null;
-  for (const n of d.nodes) {
-    els.push({ data: { id: n.id, parent: n.topic_id, kind: n.kind, label: n.speaker + ': ' + n.text }, classes: n.kind + (good.has(n.id) ? ' good' : '') });
-    if (prev && n.rel !== 'new-topic') els.push({ data: { id: 'e_' + prev + '_' + n.id, source: prev, target: n.id } });
-    prev = n.id;
+  const idx = {}; topics.forEach((t, i) => idx[t.id] = i);
+  // in expanded mode show only the selected topic; otherwise the whole map
+  const shown = expanded ? topics.filter(t => t.id === expanded) : topics;
+  for (const t of shown) {
+    const i = idx[t.id];
+    const tnodes = d.nodes.filter(n => n.topic_id === t.id);
+    const nGood = tnodes.filter(n => good.has(n.id)).length;
+    const nDec = tnodes.filter(n => decs.has(n.id)).length;
+    const cnt = t.node_ids.length;
+    const w = Math.round(Math.min(230, 150 + cnt * 1.6)), h = Math.round(Math.min(150, 80 + cnt * 1.4));
+    const parts = [cnt + ' segs']; if (nDec) parts.push('🟢' + nDec); if (nGood) parts.push('✨' + nGood);
+    const label = t.label + '\n(' + parts.join('  ') + ')';
+    els.push({ data: { id: t.id, label, col: TCOLORS[i % TCOLORS.length], w, h, tw: w - 20, cnt, deg: 1 }, classes: 'topic' + ((nGood || nDec) ? ' hasmark' : '') + (expanded === t.id ? ' sel' : '') });
+  }
+  if (!expanded) {
+    // topic-to-topic flow edges, by first-appearance order
+    for (let i = 1; i < topics.length; i++)
+      els.push({ data: { id: 'te_' + topics[i - 1].id + '_' + topics[i].id, source: topics[i - 1].id, target: topics[i].id } });
+  } else {
+    // selected topic in the center, its segments in a concentric ring around it
+    for (const n of d.nodes.filter(n => n.topic_id === expanded)) {
+      const txt = (n.text || '').length > 64 ? n.text.slice(0, 61) + '…' : n.text;
+      els.push({ data: { id: n.id, kind: n.kind, label: n.speaker + ': ' + txt, deg: 0 }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : '') });
+      els.push({ data: { id: 'se_' + expanded + '_' + n.id, source: expanded, target: n.id }, classes: 'segedge' });
+    }
   }
   cy.json({ elements: els });
-  if (d.nodes.length !== lastN) { cy.layout({ name: 'cose', animate: false }).run(); lastN = d.nodes.length; }
+  const lay = expanded
+    ? { name: 'concentric', concentric: n => n.data('deg'), levelWidth: () => 1, minNodeSpacing: 18, padding: 40, spacingFactor: 1.1 }
+    : { name: 'cose', animate: false, randomize: true, padding: 50, nodeRepulsion: () => 400000, idealEdgeLength: () => 150, edgeElasticity: () => 40, gravity: 1.2, numIter: 1500, componentSpacing: 120, nodeOverlap: 40, coolingFactor: 0.95, initialTemp: 250 };
+  cy.layout(lay).run();
+  cy.fit(undefined, 30);
+  document.getElementById('graphCap').textContent = expanded
+    ? 'showing one thread — tap a moment to read it; tap the centre topic to return to the map.'
+    : 'topics in this meeting — tap one to recap that thread; tap again to expand its moments.';
 }
 function showNode(id) {
   const n = nodeMap[id]; if (!n) return;
@@ -771,12 +822,12 @@ function switchView(v) {
   graphVisible = v === 'graph';
   const flowV = v === 'flow';
   feed.style.display = (v === 'feed') ? 'block' : 'none';
-  document.getElementById('cy').style.display = graphVisible ? 'block' : 'none';
+  document.getElementById('graphWrap').style.display = graphVisible ? 'flex' : 'none';
   document.getElementById('flow').style.display = flowV ? 'flex' : 'none';
   tabFeed.classList.toggle('active', v === 'feed');
   tabGraph.classList.toggle('active', graphVisible);
   tabFlow.classList.toggle('active', flowV);
-  if (graphVisible && lastGraph) { ensureCy(); cy.resize(); lastN = -1; renderGraph(lastGraph); }
+  if (graphVisible && lastGraph) { ensureCy(); cy.resize(); lastSig = ''; renderGraph(lastGraph); }
   if (flowV) { ensureCyflow(); cyflow.resize(); if (!flowLoaded) loadFlow(); else cyflow.fit(undefined, 30); }
 }
 tabFeed.onclick = () => switchView('feed');
