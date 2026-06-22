@@ -11,7 +11,7 @@ Identity is the primary calendar's id (== the account email), so only calendar.r
 required — no extra userinfo scope. External URLs are env-overridable (test seam).
 
 Config:
-  GOOGLE_TOKEN_FILE                       — owner's existing authorized-user json (optional).
+  GOOGLE_TOKEN_FILE / GOOGLE_TOKEN_JSON   — owner's existing authorized-user json, by path or inline (optional).
   GOOGLE_CLIENT_ID / _SECRET / _REDIRECT_URI — OAuth web client for the per-user flow (optional).
 """
 import json, os, time
@@ -24,6 +24,7 @@ CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI")
 TOKEN_FILE = os.environ.get("GOOGLE_TOKEN_FILE")
+TOKEN_JSON = os.environ.get("GOOGLE_TOKEN_JSON")  # inline authorized-user json (TEE deploy: no file to mount)
 SCOPES = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly"
 
 AUTH = os.environ.get("GOOGLE_OAUTH_AUTH", "https://accounts.google.com/o/oauth2/v2/auth")
@@ -38,7 +39,11 @@ def oauth_configured():
 
 
 def owner_file():
-    return bool(TOKEN_FILE and Path(TOKEN_FILE).exists())
+    return bool(TOKEN_JSON or (TOKEN_FILE and Path(TOKEN_FILE).exists()))
+
+
+def _owner_creds():
+    return json.loads(TOKEN_JSON) if TOKEN_JSON else json.loads(Path(TOKEN_FILE).read_text())
 
 
 def _refresh(client_id, client_secret, refresh_token, token_uri=None):
@@ -58,7 +63,7 @@ def _access(uid):
     if c and now < c[1]:
         return c[0]
     if uid == "owner" and owner_file():
-        d = json.loads(Path(TOKEN_FILE).read_text())  # standard authorized-user json
+        d = _owner_creds()  # standard authorized-user json (env or file)
         access, ttl = _refresh(d["client_id"], d["client_secret"], d["refresh_token"], d.get("token_uri"))
     else:
         g = users.load(uid).get("google")

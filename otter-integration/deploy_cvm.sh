@@ -20,33 +20,30 @@ MATRIX_TOKEN="$(get_otter MATRIX_TOKEN)"
 MATRIX_DEVICE_ID="$(get_otter MATRIX_DEVICE_ID)"
 OWNER_TOKEN="$(get_otter OWNER_TOKEN)"
 NEAR_API_KEY="$(grep '^NEAR_API_KEY=' "$HOME/projects/ic3camp-teexai/.env" | cut -d= -f2-)"
+# Owner's existing authorized-user Google token (calendar.readonly + drive.readonly), injected inline.
+GOOGLE_TOKEN_JSON="$(cat "$HOME/projects/teleport/planning/scripts/calendar_token_personal.json")"
 
 read -r OTTER_SESSIONID OTTER_CSRFTOKEN <<<"$(python3 -c "import browser_cookie3 as bc; j={c.name:c.value for c in bc.chrome(domain_name='otter.ai')}; print(j['sessionid'], j['csrftoken'])")"
 
 export OTTER_SESSION=sealed HOST=0.0.0.0 OTTER_OUT=/data/otter
 export BASE_URL="$CVM/$NAME"
-export OTTER_SESSIONID OTTER_CSRFTOKEN NEAR_API_KEY \
+export OTTER_SESSIONID OTTER_CSRFTOKEN NEAR_API_KEY GOOGLE_TOKEN_JSON \
        MATRIX_HOMESERVER MATRIX_ROOM MATRIX_TOKEN MATRIX_DEVICE_ID OWNER_TOKEN
 
-ENV_JSON="$(python3 - <<'PY'
+# Build the manifest in ONE python step that reads os.environ directly — avoids re-embedding
+# secret JSON (e.g. GOOGLE_TOKEN_JSON) into a bash-interpolated python literal.
+MANIFEST="$(NAME="$NAME" IMAGE="$IMAGE" PORT="$PORT" python3 - <<'PY'
 import json, os
 keys = ["OTTER_SESSION","HOST","OTTER_OUT","BASE_URL",
-        "OTTER_SESSIONID","OTTER_CSRFTOKEN","NEAR_API_KEY",
+        "OTTER_SESSIONID","OTTER_CSRFTOKEN","NEAR_API_KEY","GOOGLE_TOKEN_JSON",
         "MATRIX_HOMESERVER","MATRIX_ROOM","MATRIX_TOKEN","MATRIX_DEVICE_ID","OWNER_TOKEN"]
-print(json.dumps({k: os.environ[k] for k in keys}))
-PY
-)"
-
-MANIFEST="$(python3 - <<PY
-import json
-env = json.loads('''$ENV_JSON''')
 print(json.dumps({
-  "name": "$NAME",
+  "name": os.environ["NAME"],
   "runtime": "image",
-  "image": "$IMAGE",
-  "image_port": $PORT,
+  "image": os.environ["IMAGE"],
+  "image_port": int(os.environ["PORT"]),
   "volumes": [{"name": "otter-data", "mount": "/data"}],
-  "env": env,
+  "env": {k: os.environ[k] for k in keys},
 }))
 PY
 )"
