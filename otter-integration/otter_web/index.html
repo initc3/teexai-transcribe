@@ -630,6 +630,7 @@ function ensureCy() {
       { selector: 'node.seg.action_item', css: { 'background-color': '#2bb673', 'shape': 'diamond', 'width': 17, 'height': 17 } },
       { selector: 'node.seg.divergence', css: { 'background-color': '#c0524a' } },
       { selector: 'node.seg.good', css: { 'border-width': 3, 'border-color': '#ff5ea8' } },
+      { selector: 'node.seg.lbl', css: { 'label': 'data(label)', 'font-size': '9px', 'color': '#cdd2da', 'text-halign': 'right', 'text-valign': 'center', 'text-margin-x': 4, 'text-wrap': 'wrap', 'text-max-width': '150px', 'z-index': 10 } },
       { selector: 'node:selected', css: { 'border-width': 3, 'border-color': '#cdd2da' } },
       { selector: 'edge', css: { 'width': 1, 'line-color': '#23283a', 'curve-style': 'bezier', 'target-arrow-shape': 'none', 'opacity': 0.45 } },
     ] });
@@ -686,7 +687,9 @@ function renderGraph(d) {
     classes: 'lane' + ((t.minor || t.combine) ? ' ctl' : ''), position: { x: 92, y: i * LANE_H + LANE_H / 2 } }));
   d.nodes.forEach((n, i) => {
     const ly = lane[merge[n.topic_id] || n.topic_id]; if (ly === undefined) return;
-    els.push({ data: { id: n.id, kind: n.kind }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : ''),
+    const notable = good.has(n.id) || n.kind === 'decision' || n.kind === 'action_item';  // anchors worth labelling
+    const lbl = notable ? ((n.text || '').length > 46 ? n.text.slice(0, 44) + '…' : (n.text || '')) : '';
+    els.push({ data: { id: n.id, kind: n.kind, label: lbl }, classes: 'seg ' + n.kind + (good.has(n.id) ? ' good' : '') + (notable ? ' lbl' : ''),
                position: { x: X0 + i * XSTEP, y: ly * LANE_H + LANE_H / 2 } });
   });
   cy.json({ elements: els });
